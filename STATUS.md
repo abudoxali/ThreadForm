@@ -82,7 +82,7 @@ Two independent engineering-review passes were run (`pr-review-toolkit:code-revi
 
 - **Branch:** `main`
 - **Remote:** `https://github.com/3bud-ZC/ThreadForm.git`
-- **Commit:** created immediately after this status write.
+- **Commit:** `b1a1cd9` — pushed to `origin/main`.
 - Note: the diff includes cosmetic Tailwind-class-order reformatting across several M00 files untouched by this milestone's logic — `prettier-plugin-tailwindcss` (added as a dependency during M00's own review) is exercised repo-wide for the first time now that `pnpm format`/`format:check` are actually run as part of this milestone's workflow.
 
 ## Remaining Issues
