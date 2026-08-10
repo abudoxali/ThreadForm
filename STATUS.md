@@ -103,7 +103,7 @@ An independent design-review pass judged the result against `docs/DESIGN_SYSTEM.
 
 - **Branch:** `main`
 - **Remote:** `https://github.com/3bud-ZC/ThreadForm.git`
-- Not yet committed as of this writing — see the closing message for the commit hash.
+- **Commit:** `3d2c315` — pushed to `origin/main`.
 
 ## Remaining Issues
 
