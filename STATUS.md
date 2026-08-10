@@ -107,7 +107,7 @@ None.
 
 - **Branch:** `main`
 - **Remote:** `https://github.com/3bud-ZC/ThreadForm.git` (empty on GitHub; local git identity and `gh` auth both confirmed working)
-- **Commit:** created immediately after this status write, in a single Milestone 00 commit.
+- **Commit:** `d3e789a` — pushed to `origin/main`.
 
 ## Next milestone
 
