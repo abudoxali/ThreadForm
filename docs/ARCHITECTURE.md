@@ -11,7 +11,7 @@ Domain Engines (project-engine, and future material/effects/animation/export eng
         ↓
 Garment Runtime (future — resolves a GarmentReference against a manifest)
         ↓
-Renderer / Persistence / Export adapters (future 3d-engine, 2d-engine, local-storage)
+Renderer / Persistence / Export adapters (future 3d-engine, 2d-engine; local-storage implemented)
 ```
 
 Dependencies point downward only. A package never imports something above it
@@ -27,9 +27,11 @@ architecture exists to prevent. Concretely:
 - **Rendering** belongs to `3d-engine` / `2d-engine` (future), invoked by a
   thin adapter component — never inline Three.js/canvas calls in a Studio
   panel component.
-- **Persistence** belongs to `local-storage` (future) and is called through
-  `project-engine`'s load/save boundary, never `localStorage`/`indexedDB`
-  calls scattered through components.
+- **Persistence** belongs to `local-storage` (IndexedDB) and is reached only
+  through `apps/web/src/lib/projectRepository.ts` — never `indexedDB` calls
+  scattered through components. `local-storage` itself calls back into
+  `project-engine`'s `validateProject`/`migrateProject` on every read, so
+  untrusted stored data can't reach the UI without passing that boundary.
 - **Entitlement checks** belong to `entitlements` (future) as a single
   `can(user, capability)`-shaped boundary — never `if (user.pro)` scattered
   through UI or domain code.
@@ -37,15 +39,16 @@ architecture exists to prevent. Concretely:
   `reorderArtworkLayer`, etc.) — components call these functions and re-render
   from the result; they do not hand-edit a `Project` object's fields.
 
-## Current physical packages (M00)
+## Current physical packages (M00–M01)
 
-| Package | Responsibility |
-|---|---|
-| `packages/types` | Strict TypeScript contracts for the project domain model. Zero runtime *dependencies* — its only runtime code is the `CURRENT_PROJECT_SCHEMA_VERSION` constant. |
-| `packages/project-engine` | Creates, validates, migrates and mutates `Project` values. Pure functions; no React, no storage, no rendering. |
-| `packages/ui` | Design-token CSS and presentational React primitives (`Button`, `Panel`, `IconButton`, ...). No domain knowledge. |
-| `packages/config` | Shared `tsconfig` and ESLint flat configs consumed by every package. |
-| `apps/web` | The Next.js application: marketing site (`/`) and Studio shell (`/studio`). Composes the packages above; contains no domain logic of its own beyond UI state (which tool/panel is active). |
+| Package                   | Responsibility                                                                                                                                                                                                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/types`          | Strict TypeScript contracts for the project domain model. Zero runtime _dependencies_ — its only runtime code is the `CURRENT_PROJECT_SCHEMA_VERSION` constant.                                                                                                                                               |
+| `packages/project-engine` | Creates, validates, migrates and mutates `Project` values. Pure functions; no React, no storage, no rendering.                                                                                                                                                                                                |
+| `packages/local-storage`  | IndexedDB persistence adapter (via `idb`): save/load/list/delete a `Project`, plus a small "last opened project" pointer. Depends on `project-engine` for `validateProject`/`migrateProject` on every read; no React.                                                                                         |
+| `packages/ui`             | Design-token CSS and presentational React primitives (`Button`, `Panel`, `IconButton`, ...). No domain knowledge.                                                                                                                                                                                             |
+| `packages/config`         | Shared `tsconfig` and ESLint flat configs consumed by every package.                                                                                                                                                                                                                                          |
+| `apps/web`                | The Next.js application: marketing site (`/`) and Studio (`/studio`). `src/lib/projectRepository.ts` is the only module that combines `project-engine` + `local-storage`; `src/hooks/useStudioProject.ts` is the only place that wires it into React state. Components hold only UI-only state (active tool). |
 
 ## Documented future boundaries (not yet implemented)
 
@@ -64,9 +67,6 @@ obvious home, not because empty packages should exist yet:
   from the renderers so presets can be authored/tested without a GPU context.
 - **`export-engine`** — turns a `Project` + `ExportPreferences` into an image,
   video, or 3D file. See `EXPORT_SPEC.md` for its boundary.
-- **`local-storage`** — the IndexedDB-backed persistence adapter for guest
-  projects. `project-engine`'s `validateProject` is the trust boundary this
-  package's reads must pass through.
 - **`entitlements`** — the single place capability checks (`canExportPro`,
   `canUsePremiumGarment`, ...) are decided, so Pro/Free logic never leaks into
   UI conditionals.
@@ -75,11 +75,44 @@ obvious home, not because empty packages should exist yet:
 
 ## State ownership
 
-React component state in `apps/web` is limited to *UI-only* concerns (which
+React component state in `apps/web` is limited to _UI-only_ concerns (which
 panel is open, which tool is active). Anything that describes the project
 itself — garment, artwork, materials, camera, etc. — is a `Project` value
 produced and mutated through `project-engine`, never ad hoc `useState` shape
-that mirrors the domain model. The Studio shell built in M00 deliberately
-keeps `selectedCategory`/`activeTool` as local UI state because no `Project`
-exists yet to back them; once garment selection creates a real project via
-`createProject`, that becomes the source of truth instead.
+that mirrors the domain model.
+
+As of M01, `useStudioProject` (`apps/web/src/hooks`) owns the real `Project`
+and drives the Studio from it: `StudioShell` keeps only `activeTool` as local
+UI state; garment selection, the project's name, and everything else visible
+in the Inspector/topbar come from the hook's `project` value, which is backed
+by `packages/local-storage`. Mutating the project always goes through the
+hook's `updateProject`-based actions (e.g. `renameProject`), which apply a
+`project-engine`-shaped update, optimistically update React state, and
+debounce a write to `local-storage` — never a direct `setState` on a
+hand-edited copy of the `Project` object.
+
+## Project repository & autosave (M01)
+
+`apps/web/src/lib/projectRepository.ts` is a plain (non-React) module that is
+the _only_ place `project-engine` and `local-storage` are used together:
+`createAndPersistProject`, `openProject`, `saveProjectChanges`,
+`deleteProjectById`, `listRecentProjects`, `restoreLastOpenedProject`. It has
+no knowledge of React; `useStudioProject` is the only caller.
+
+The hook's autosave is debounced (600ms) and guards against two failure
+modes that matter once writes are asynchronous and user-triggered:
+
+- **Stale writes** — each scheduled save carries a monotonic "epoch"; only
+  the most recently scheduled save's completion is allowed to update
+  `saveStatus`, so a slow, superseded write can't flip the indicator back to
+  "Saved" after a newer edit already failed or is still pending.
+- **Cross-project bleed** — switching projects (`chooseGarment`,
+  `openExistingProject`, or a project being deleted out from under the
+  current view) cancels any pending/in-flight save's ability to update
+  `saveStatus`, so a write for the _previous_ project can't affect the save
+  indicator shown for the next one. `startNewProject` is the one exception:
+  it flushes the pending write immediately (rather than cancelling it) so
+  the last edit isn't lost before leaving the project.
+
+See `packages/local-storage`'s own module docs (`src/db.ts`) for the
+IndexedDB schema itself.

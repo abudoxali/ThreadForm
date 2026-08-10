@@ -19,9 +19,10 @@ pnpm dev        # apps/web on http://localhost:3000
 ## Workspace
 
 ```
-apps/web              Next.js app — marketing site (/) and Studio shell (/studio)
+apps/web              Next.js app — marketing site (/) and Studio (/studio), with local-first project persistence
 packages/types         Strict TypeScript domain contracts
 packages/project-engine  Create/validate/migrate/mutate a Project
+packages/local-storage   IndexedDB persistence adapter for guest projects
 packages/ui             Design tokens + presentational React primitives
 packages/config         Shared tsconfig + ESLint configs
 docs/                  Product, architecture, design, schema, garment, export, privacy specs
@@ -29,15 +30,16 @@ docs/                  Product, architecture, design, schema, garment, export, p
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `pnpm dev` | Run the web app locally |
-| `pnpm lint` | Lint every package |
-| `pnpm typecheck` | Type-check every package |
-| `pnpm test` | Unit tests (Vitest) |
-| `pnpm test:e2e` | Playwright smoke tests (build the app first) |
-| `pnpm build` | Production build |
-| `pnpm format` | Format with Prettier |
+| Command             | Description                                      |
+| ------------------- | ------------------------------------------------ |
+| `pnpm dev`          | Run the web app locally                          |
+| `pnpm lint`         | Lint every package                               |
+| `pnpm typecheck`    | Type-check every package                         |
+| `pnpm test`         | Unit tests (Vitest)                              |
+| `pnpm test:e2e`     | Playwright suite (build the app first; Chromium) |
+| `pnpm build`        | Production build                                 |
+| `pnpm format`       | Format with Prettier                             |
+| `pnpm format:check` | Check formatting without writing (used in CI)    |
 
 ## Contributing / working with Claude Code
 

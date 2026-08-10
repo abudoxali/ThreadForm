@@ -50,7 +50,7 @@ relying on optional fields that can be inconsistently combined.
 `schemaVersion` (currently `1`, see `CURRENT_PROJECT_SCHEMA_VERSION` in
 `packages/types/src/schema-version.ts`) is bumped whenever a change would
 break an older persisted `Project`. `packages/project-engine/src/migrate.ts`
-holds a `migrations` map keyed by *from*-version; `migrateProject` walks a raw
+holds a `migrations` map keyed by _from_-version; `migrateProject` walks a raw
 payload forward to the current version before validation. There are no prior
 versions yet, so the map is empty — but the mechanism exists so the first
 breaking change has a concrete, tested place to land instead of being
@@ -63,7 +63,22 @@ TypeScript types, used by `validateProject` at trust boundaries — loading a
 project from browser storage, an imported file, or (later) a cloud sync
 response. Code that already holds a `Project` it produced itself (e.g. via
 `createProject`) does not need to re-validate; `zod` guards untrusted input,
-not internal plumbing that TypeScript already checks at compile time.
+not internal plumbing that TypeScript already checks at compile time. Every
+enum in that schema is pinned to its `packages/types` union with
+`as const satisfies readonly X[]`, so adding a category/zone/etc. to the type
+without updating the schema is a compile error rather than a runtime rejection
+of an otherwise-valid saved project.
+
+## Local persistence (M01)
+
+`packages/local-storage` is the IndexedDB-backed adapter guest projects are
+saved to. Read path: `stored record → migrateProject → validateProject →
+Project`. A record that fails either step throws `InvalidProjectDataError`
+and is left exactly as stored — a failed load is never treated as licence to
+delete or silently rewrite data. See `packages/local-storage/src/db.ts` for
+the database name/version/store layout, and `docs/ARCHITECTURE.md`'s
+"Project repository & autosave" section for how `apps/web` debounces writes
+and restores the last-opened project on mount.
 
 ## Non-trivial domain behavior
 

@@ -1,117 +1,100 @@
 # ThreadForm — Status
 
 **Project:** ThreadForm — browser-based 2D/3D apparel design & mockup studio
-**Current milestone:** M00 — Product, Architecture, Claude Code Skills & Design Foundation
+**Current milestone:** M01 — Local-First Project Persistence & Real Studio Project State
 **Milestone state:** PASS
-**Overall project completion:** ~8% (foundation only — no garment/3D/2D engine, no persistence, no auth/billing exist yet; those are the bulk of the product)
-**M00 completion:** ~97%
+**Overall project completion:** ~14% (foundation + real local persistence exist; no garment/3D/2D rendering, no artwork, no auth/billing — those remain the bulk of the product)
+**M01 completion:** ~96%
 
 ## Completed work
 
-**Repository & tooling**
-- pnpm workspaces + Turborepo monorepo, `.gitignore`, `.editorconfig`, Prettier (with `prettier-plugin-tailwindcss`), root scripts (`dev`, `build`, `lint`, `typecheck`, `test`, `test:e2e`, `format`).
-- `packages/config` — shared strict `tsconfig` bases + ESLint 9 flat configs.
+**`packages/local-storage` (new)** — IndexedDB persistence via `idb` (justified: a ~1KB Promise wrapper over the same native API, not a framework; tested against real IndexedDB semantics via `fake-indexeddb`, never a hand-rolled mock). Database `threadform` v1, two object stores: `projects` (keyed by id, indexed by `updatedAt`) and `meta` (holds the "last opened project" pointer). Every read runs the stored payload through `project-engine`'s `migrateProject` + `validateProject` (via `validateProject` alone, which does both) before it's trusted; a record that fails is left untouched in storage and surfaces as `InvalidProjectDataError` — never silently deleted or overwritten. Recovers from a closed/terminated connection (`terminated`/`blocking` handlers) instead of failing every future write until a page reload. 17 tests against real fake-indexeddb: save/load round-trip, update-not-duplicate semantics, corrupt-data and unknown-schema-version handling (record left in place), listing order, delete, existence checks, and IndexedDB-unavailable handling.
 
-**Domain foundation**
-- `packages/types` — strict TypeScript contracts for the full `Project` domain model (garment, material, artwork layers, print zones, effects, animation, camera, lighting, background, export preferences), discriminated unions where they add correctness, schema-version constant.
-- `packages/project-engine` — pure functions: `createProject`, artwork-layer operations (`addArtworkLayer`, `removeArtworkLayer`, `duplicateArtworkLayer`, `reorderArtworkLayer`, `centerArtworkLayer`), `zod`-based `validateProject` at the trust boundary, `migrateProject` scaffold. Every enum in the `zod` schema is pinned to its `@threadform/types` union via `satisfies readonly X[]`, so a union member added to the type without updating the schema is a compile error, not a silent runtime rejection. 18 Vitest unit tests, all passing.
-- `packages/ui` — dark-first design tokens (`tokens.css`, with a reserved light-theme block) and presentational primitives (`Button`, `IconButton`, `Panel`, `VisuallyHidden`). 3 component tests passing.
+**`apps/web/src/lib/projectRepository.ts` (new)** — the only module that combines `project-engine` (domain logic) with `local-storage` (persistence): create+persist, open, save, delete, list recents, restore-last-opened (never throws; clears a stale pointer and falls back to the start state).
 
-**Application**
-- `apps/web` — Next.js 15 / React 19 / Tailwind v4, TypeScript strict.
-  - `/` — original marketing landing page (hero, 4-step workflow, capability list, local-first note, footer). No fake social proof, no fake stats, no stock content.
-  - `/studio` — real Studio shell: topbar, icon tool rail, canvas, inspector, responsive down to mobile (bottom tool bar + collapsible inspector via native `<details>`). Garment-category picker is real and interactive; everything that depends on a garment/3D engine is explicitly disabled (`aria-disabled` + explanatory `title`, still focusable so the explanation is reachable by keyboard and mouse), and the inspector says outright that it isn't wired to a garment engine yet. No fake 3D/garment rendering.
-  - 4 component/route smoke tests passing (Vitest + Testing Library).
-  - Playwright configured (`test:e2e`) with a home→Studio smoke flow, tool-rail unlock flow, and a mobile-overflow check. Not run in CI (see Known Issues).
+**`apps/web/src/hooks/useStudioProject.ts` (new)** — the only place that wires the repository into React. Debounced (600ms) autosave with a monotonic "epoch" so a stale or in-flight write can't flip the save indicator after a newer edit or a project switch; pending-save cancellation ordered *before* delete so a queued write can't resurrect a just-deleted record; a best-effort `pagehide` flush so a rename typed right before navigating away isn't dropped. 10 tests (mocked repository, fake timers) covering initial restore, garment-choice creation, debounce collapsing, save-failure honesty, and delete-current-vs-other-project behavior.
 
-**Docs** (`docs/`): `PRODUCT.md`, `ARCHITECTURE.md`, `DESIGN_SYSTEM.md`, `PROJECT_SCHEMA.md`, `GARMENT_SPEC.md`, `EXPORT_SPEC.md`, `PRIVACY_SECURITY.md`.
+**Studio UI, rewired to a real `Project`** — `StudioShell`/`StudioTopbar`/`Inspector`/`GarmentPicker` now read the garment, project name, and tool-rail unlock state from the hook's `project`, not local UI state (only `activeTool` remains local — genuinely ephemeral). New `RecentProjects` (open/inline-confirm-delete) and `NoticeBanner` (restrained, non-technical error messages) components. Project name is inline-editable in the topbar. Garment ids are a documented placeholder (`garmentId: category`, `garmentVersion: '0.0.0'`) until the real garment-manifest system exists — noted, not hidden. 6 integration tests (`apps/web/src/app/studio/page.test.tsx`, real fake-indexeddb) covering empty state, stale-pointer recovery, create→drives-UI, truthful save-status transitions, recent-project listing/reopening, and delete-returns-to-start.
 
-**Claude Code intelligence**
-- `CLAUDE.md` — concise, project-specific.
-- `.claude/rules/` — `architecture-boundaries.md`, `frontend-quality.md`, `testing-qa.md`, `security-privacy.md`.
-- `.claude/skills/` — `threadform-visual-qa`, `threadform-change-review`, `threadform-milestone-closeout`, each a valid `SKILL.md` with frontmatter. All three were actually invoked during this milestone's closeout (not just written and left untested) — see Verification below.
+**Playwright E2E — now required and running.** `apps/web/e2e/smoke.spec.ts` covers, against a real production build + `next start`: home→Studio, mobile-overflow, and a single sequential lifecycle test (choose garment → persists → **reload restores it** → create a second project → both appear in recents → switch between them → **delete → reload confirms it does not return**). Verified stable across 4+ consecutive local runs (no flakiness after fixing two real Playwright API/locator mistakes — see Review Findings).
 
-**CI**: `.github/workflows/ci.yml` — install (frozen lockfile) → lint → typecheck → test → build, on push/PR to `main`.
+**CI** — added `format:check` (the plugin that makes it meaningful, `prettier-plugin-tailwindcss`, was actually installed in M00 but this is the first time `format:check` itself ran in CI) and a Playwright stage (installs Chromium only, runs after `pnpm build` since the suite drives `next start`).
 
-## Acceptance criteria
+**Docs updated:** `ARCHITECTURE.md` (local-storage moved from "documented future boundary" to implemented; new "Project repository & autosave" section explaining the epoch/cross-project-bleed guards), `PROJECT_SCHEMA.md` (local persistence section; noted the schema enums are now compile-time-pinned to their types), `PRIVACY_SECURITY.md` (local-first project data is now an implemented guarantee, not an intention — artwork upload explicitly still does not exist), `CLAUDE.md`, `README.md`. Landing-page copy updated from "designed to stay in your browser" to "live in your browser," per the milestone brief, only after persistence was verified working.
 
-**Repository** — [x] initialized/configured · [x] pnpm + lockfile · [x] Turborepo working · [x] no secrets/junk (verified via `git status`)
+## Persistence
 
-**Claude Code** — [x] `CLAUDE.md` · [x] `.claude/rules/` · [x] `threadform-visual-qa` · [x] `threadform-change-review` · [x] `threadform-milestone-closeout` · [x] valid frontmatter/conventions
+- **IndexedDB implementation:** `idb`-wrapped native IndexedDB. No fake in-memory production path.
+- **Database/version:** `threadform`, version `1`. Stores: `projects` (keyPath `id`, index `by-updatedAt`), `meta` (keyPath `key`, holds `lastOpenedProjectId`).
+- **Validation/migration boundary:** every `loadProject` call runs the stored payload through `project-engine`'s `validateProject` (migrates internally, then validates); failures throw `InvalidProjectDataError` and never touch the stored record.
+- **Autosave:** 600ms debounce; monotonic epoch prevents a stale write from reporting "Saved" after a newer edit failed, is pending, or belongs to a different project; pending saves are cancelled (not silently dropped) before a delete, and flushed (not dropped) on explicit "New Project" or `pagehide`.
+- **Restore behavior:** on mount, restores the last-opened project if its pointer resolves to a valid record; otherwise (missing, corrupt, or no pointer at all) shows the garment-picker start state and clears the stale pointer so it doesn't keep failing on every future visit.
 
-**Product** — [x] PRODUCT.md · [x] ARCHITECTURE.md · [x] DESIGN_SYSTEM.md · [x] PROJECT_SCHEMA.md · [x] GARMENT_SPEC.md · [x] EXPORT_SPEC.md · [x] PRIVACY_SECURITY.md
+## Testing
 
-**Domain** — [x] core TS contracts · [x] strict/type-safe (zero `any`, zero non-null assertions; three `as` casts total, each justified and reviewed: `as HexColor` after regex validation, `raw as Record<string, unknown>` after a `typeof`/`null` guard, one in a test deliberately constructing invalid input) · [x] schema versioning scaffolded, with enum lists compile-time-pinned to their types · [x] non-trivial behavior tested (18 tests)
+Exact commands, run from a clean state after all fixes below:
 
-**UI** — [x] `/` renders · [x] `/studio` renders · [x] original visual identity (warm-copper accent, no generic AI-purple/glassmorphism) · [x] desktop polish · [x] tablet usable · [x] mobile usable · [x] no fake garment functionality · [x] no fake social proof · [x] no major a11y defects found after fix (see Verification — one real defect was found and fixed, not just found)
+- `pnpm format:check` — **passed.**
+- `pnpm typecheck` — **6/6 packages passed** (added `@threadform/local-storage`).
+- `pnpm lint` — **6/6 packages passed, 0 errors, 0 warnings.**
+- `pnpm test` — **62/62 tests passed**: `project-engine` 18, `local-storage` 17, `ui` 3, `web` 24 (6 `formatRelativeTime` — including the crash-guard regression test below — + 2 home + 10 hook + 6 studio-integration).
+- `pnpm build` — **succeeded.** `/studio` production bundle grew from 3.17 kB (M00 shell) to ~22 kB (real persistence logic).
+- `pnpm --filter @threadform/web test:e2e` — **3/3 passed**, run 4+ times consecutively with no flakiness, against a real production build (`next start`).
 
-**Quality** — [x] lint passes (0 errors, 0 warnings) · [x] typecheck passes · [x] unit tests pass (25/25) · [x] production build passes · [x] browser smoke via Playwright: no console errors, no horizontal overflow at 6 viewports · [x] no known console/hydration errors · [x] final diff reviewed (via `threadform-change-review`)
+## E2E
 
-**CI** — [x] GitHub Actions workflow exists and covers install/lint/typecheck/test/build
+Flows actually exercised in the committed suite, in one sequential Chromium test (shares one browser context/storage across steps by design, since the flows are about persistence *between* steps):
 
-**Status** — [x] exactly one `STATUS.md` · [x] reflects actual state · [x] verification evidence below is real, not fabricated
+1. Choose a garment on a fresh `/studio` → a real project is created and persisted; topbar/Inspector reflect it; previously-disabled tools unlock.
+2. Reload the page → the persisted project is restored directly (the picker's empty state does not flash first).
+3. Create a second project → both projects appear in "recent projects" → switching to the first one reopens it correctly.
+4. Delete a project via the recents list (inline confirm) → reload → the deleted project never returns; the still-open project survives.
+Plus: home→Studio navigation, and no horizontal overflow at 375px width.
 
-## Verification performed
+## Visual QA
 
-All commands run from the repo root unless noted.
+Actually rendered via Playwright + Chromium (Claude-in-Chrome MCP tool unavailable in this environment, as in M00) at 1440×900, 1280×720, 1024×768, 768×1024, 390×844, 360×800 for the Studio's **editing** state (topbar with editable name + save status + New Project), plus desktop and mobile for the **start-with-recents** and **delete-confirmation** states. **Found and fixed one real defect:** at 390px/360px the topbar wrapped to two lines ("New Project" broke mid-word) because the inert Export/Sign-in placeholders were competing for space with the one real action. Fixed by hiding those two disabled placeholders below the `sm` breakpoint (they do nothing functionally, so hiding them costs nothing) and giving "New Project" `whitespace-nowrap`; re-verified clean at all six viewports after the fix.
 
-- `pnpm install` — succeeded (approved `esbuild`/`sharp`/`unrs-resolver` postinstall scripts via `pnpm-workspace.yaml`'s `allowBuilds`).
-- `pnpm typecheck` — **4/4 packages passed.**
-- `pnpm lint` — **4/4 packages passed, 0 errors, 0 warnings** (two Next.js `import/no-anonymous-default-export` warnings and one `next-env.d.ts` triple-slash-reference error were found and fixed during this pass).
-- `pnpm test` — **25/25 tests passed** across `project-engine` (18), `ui` (3), `web` (4).
-- `pnpm build` — **succeeded.** `apps/web` production build: 3 static routes (`/`, `/studio`, `/_not-found`).
-- `pnpm format` — verified working after fixing a real bug (see below); not run as a CI gate (see Known Issues).
+## Accessibility
 
-### Independent engineering review (`pr-review-toolkit:code-reviewer` subagent)
+A keyboard-only pass (real Tab/Enter/typing, no mouse) was run against the flows this milestone changed: tabbed to and activated a garment option with Enter, tabbed to the project-name input and renamed it by typing (autosave triggered correctly). Verified via Playwright driving real keyboard events, not by inspecting CSS. **Not tested:** delete/confirm and New Project via keyboard specifically, and no real screen reader was used — both logged here rather than silently skipped.
 
-Run against the whole repo — architecture boundaries, type safety, dead code/deps, security, config correctness, and whether `/studio`'s "no fake functionality" rule actually held in the rendered output. This is the process the `threadform-change-review` skill exists to run.
+## Review Findings
 
-**Confirmed and fixed, most severe first:**
-1. **Critical — Tailwind v4 was never scanning `packages/ui/src`.** `apps/web`'s automatic content detection only walks its own subtree, so `packages/ui` (reached only via a pnpm symlink) was invisible to it. Verified directly against the built CSS: `.h-9`, `.h-10`, `.rounded-lg`, `disabled:opacity-40`, and `disabled:pointer-events-none` were genuinely absent — every `IconButton` in the tool rail was rendering at its bare ~20px icon size with no visible disabled state, silently breaking both the ≥36px touch-target rule and the "disabled controls must look disabled" honesty rule. **Fixed** by adding `@source '../../../../packages/ui/src';` to `globals.css`; rebuilt and confirmed all five classes now present in the compiled stylesheet, then re-ran the full visual QA pass (see below) and visually confirmed the tool rail now renders disabled tools dimmed and enabled tools at full size.
-2. **Critical — `prettier-plugin-tailwindcss` was referenced in `.prettierrc.json` but never installed.** Every Prettier invocation failed (with exit code 0, so it fails open). **Fixed** by adding it to root `devDependencies`; `npx prettier --version` and dependency resolution now succeed.
-3. **Important — `ToolRail`'s disabled tools used the native `disabled` attribute alongside an explanatory `title`.** Native `disabled` removes an element from the tab order and (once finding 1 was fixed and `disabled:pointer-events-none` actually started applying) blocks the hover that would show the tooltip — making the explanation unreachable by keyboard or mouse. **Fixed** by switching to `aria-disabled` + a guarded no-op `onClick` (the guard already existed in `StudioShell.selectTool`), keeping the control focusable and hoverable. Updated the two tests that asserted native `disabled`; added a Playwright assertion that the title is reachable while `aria-disabled`.
-4. **Important — the `zod` schema in `project-engine` duplicated eight `packages/types` unions as plain string arrays**, so a category/zone/etc. added to a type without updating the schema would compile cleanly and then silently reject valid saved projects at the trust boundary. **Fixed** — every list is now `as const satisfies readonly X[]` against its source type.
-5. **Important — `apps/web` declared `@threadform/project-engine` as a runtime dependency it never imports**, and `@threadform/types` (type-only usage) was listed under `dependencies` instead of `devDependencies`. **Fixed** — removed the unused dependency and its `transpilePackages` entry, moved `types` to `devDependencies`.
-6. **`centerArtworkLayer` was missing the not-found guard every sibling mutator has**, so calling it with an unknown layer id allocated a fresh `Project` and bumped `updatedAt` for a no-op change. **Fixed** with the same guard pattern as `removeArtworkLayer`/`reorderArtworkLayer`; added the matching test.
-7. **`project-engine` used `crypto.randomUUID()`'s types without declaring `@types/node`**, relying entirely on pnpm's transitive hoisting. **Fixed** by declaring it explicitly.
-8. **The hex-color regex accepted invalid lengths** (5- and 7-digit hex strings, e.g. `#12345`). **Fixed** to only accept 3/4/6/8-digit forms.
-9. **Landing-page copy asserted local persistence in the present tense** ("Guest projects live in your browser") while `docs/PRIVACY_SECURITY.md` explicitly states no persistence exists yet in M00. **Fixed** to "are designed to stay in your browser."
-10. **`VisuallyHidden` was exported and documented but had zero call sites and no test**, and was silently broken by finding 1 (relied only on an inline `clip` style with no fallback). Left in the package as a legitimate not-yet-consumed primitive (consistent with `packages/ui` shipping primitives ahead of use), but added a render test now that its CSS classes actually apply.
-- Also fixed two minor doc/comment inaccuracies the review surfaced (`ARCHITECTURE.md` overstating `packages/types` as having no runtime code at all; a stale comment in `eslint/nextjs.mjs`), and added a version-must-increase guard to `migrateProject` to prevent a latent infinite loop in a future migration.
-- **Not fixed (logged as a real gap, not silently dropped):** `packages/config` declares no `lint`/`typecheck` scripts for its own `.mjs` files; `MarketingHeader`'s in-page anchor nav (Workflow/Capabilities/Local-first) is hidden below `md` with no mobile equivalent (content is still reachable by scrolling); the root `tsconfig.json` isn't wired to anything and would error if invoked directly. None of these affect the shipped app; deferred rather than scope-creeping this closeout.
+Two independent engineering-review passes were run (`pr-review-toolkit:code-reviewer` subagent) — one over the full local-storage/repository/hook code before final verification, one focused specifically on race conditions, effect correctness, and boundary violations. Findings, all fixed and re-verified:
 
-All of the above were re-verified after fixing: `pnpm typecheck`, `pnpm lint`, and `pnpm test` were re-run clean (25/25 tests, 0 lint errors/warnings), and `pnpm build` was re-run successfully.
+- **Critical:** `formatRelativeTime` threw `RangeError` on an unparseable/missing timestamp, which would have crashed the entire recent-projects list render (the one path that deliberately skips full validation for fast listing) — fixed with a `Number.isFinite` guard, regression test added.
+- **Real bug:** `projectRef` was synced via a `useEffect` (one commit behind), so two same-tick mutations could both read a stale base and lose an update — fixed by setting the ref synchronously wherever `project` state changes (`setProjectState` helper), removing the effect entirely.
+- **Real bug:** a pending debounced save could still fire *after* a project was deleted (its `put` racing the `delete`), because the cancel call was ordered after the delete completed — fixed by cancelling before deleting.
+- **Correctness:** `loadProject` re-implemented `validateProject`'s internal migration behind an unchecked cast, which both duplicated work and could throw a raw `TypeError` instead of `InvalidProjectDataError` for certain malformed input — simplified to call `validateProject` directly (it already migrates and handles bad input).
+- **Robustness:** the cached IndexedDB connection had no recovery if the browser closed it out from under the app (storage eviction, a future version bump blocked by another tab) — added `idb`'s `terminated`/`blocking` handlers so the app reopens instead of failing every save forever.
+- Two Playwright authoring mistakes were found and fixed while writing the E2E suite itself (not from the subagent review): `page.getByText` takes a string/RegExp, not a matcher function (unlike Testing Library); and strict-mode violations from the project's established dual desktop/mobile DOM pattern don't retry the same way plain visibility assertions do, so every ambiguous locator needed an explicit `.first()`.
+- One real UI defect from the visual QA pass (mobile topbar wrapping) — see Visual QA above.
+- Minor, deliberately not fixed this pass (logged, not silently dropped): a ~600ms data-loss window remains for a hard tab-close immediately after an edit (client-side navigation and backgrounding are covered by the new `pagehide` flush; a true `beforeunload`-synchronous flush is not reliably possible for an async IndexedDB write); `packages/local-storage`'s `resetDatabaseConnectionForTests`/`clearAllDataForTests` are exported from the package's main entry rather than a quieter `/testing` subpath.
 
-### Visual QA (`threadform-visual-qa` skill, run twice — before and after the Tailwind fix)
+## Privacy
 
-Claude-in-Chrome MCP browser tool was unavailable in this environment (extension not connected); Playwright + real headless Chromium was used instead for actual rendering, not CSS-in-the-abstract reasoning.
-
-- **First pass** (before the Tailwind `@source` fix) captured full-page screenshots of `/` and `/studio` at 1440×900, 1280×720, 1024×768, 768×1024, 390×844, 360×800 (12 renders) plus an interaction flow (select a garment category → tool rail unlocks → inspector updates → switch tool). No horizontal overflow at any viewport, no console errors — but the tool rail's disabled/enabled visual distinction was not actually inspected closely enough to catch finding 1 at the time; the independent engineering review caught it by inspecting the compiled CSS directly.
-- **Second pass** (after the fix) re-ran the identical 12-viewport + interaction suite. Confirmed: still no horizontal overflow, no console errors, and — visually confirmed by re-reading the screenshots — the tool rail now clearly renders disabled tools dimmed (`opacity-40`) and the active/enabled tool at full brightness and correct 36×36px size, where before the fix all icons looked visually identical regardless of state.
-- **Not tested:** keyboard-only tab-order was not manually driven end-to-end (focus-visible CSS is present and inspectable, but not walked interactively); no real screen reader was used; `pnpm test:e2e` (the committed Playwright suite) was not run in CI or against a production build in this pass — the ad hoc QA harness above covered the same routes/viewports and was removed after use to keep it out of the deliverable.
-
-## Known issues
-
-- No garment/3D/2D rendering engine exists yet — by design for M00.
-- No persistence layer (`local-storage`/IndexedDB) exists yet — `project-engine`'s `createProject`/`validateProject` are ready for it, but nothing calls them from the UI yet.
-- `pnpm test:e2e` and `pnpm format:check` are configured but not run in CI. Deliberate for `test:e2e` at this stage (no persisted state yet worth regression-testing in a browser matrix); `format:check` should arguably be added to CI now that the plugin actually works — not done in this pass.
-- Keyboard-only navigation and screen-reader behavior were not manually walked end-to-end — only inspected structurally.
-- `packages/config`'s own `.mjs` files aren't linted/typechecked by any script.
-- Git repository was initialized this session; commit/push happens immediately after this file is finalized.
-
-## Blockers
-
-None.
+- No new network call, upload endpoint, or analytics path exists anywhere in the new code — verified by review and by inspection (no `fetch`/`XHR`/`WebSocket`/`sendBeacon` in the diff).
+- Project data (garment reference, name, timestamps) stays in the browser's IndexedDB; there is still no backend in this repository.
+- `docs/PRIVACY_SECURITY.md` updated to state this as implemented fact, not intention — and explicit that artwork upload still does not exist (out of scope for M01, per the milestone brief).
 
 ## Git
 
 - **Branch:** `main`
-- **Remote:** `https://github.com/3bud-ZC/ThreadForm.git` (empty on GitHub; local git identity and `gh` auth both confirmed working)
-- **Commit:** `d3e789a` — pushed to `origin/main`.
+- **Remote:** `https://github.com/3bud-ZC/ThreadForm.git`
+- **Commit:** created immediately after this status write.
+- Note: the diff includes cosmetic Tailwind-class-order reformatting across several M00 files untouched by this milestone's logic — `prettier-plugin-tailwindcss` (added as a dependency during M00's own review) is exercised repo-wide for the first time now that `pnpm format`/`format:check` are actually run as part of this milestone's workflow.
 
-## Next milestone
+## Remaining Issues
 
-**M01 — Local-first project persistence.** Wire `project-engine`'s `createProject`/`validateProject` to a real `local-storage` package (IndexedDB-backed), make the Studio's garment picker actually create and persist a `Project`, and make the Inspector read/write real project fields instead of local UI state.
+- No garment/3D/2D rendering, no artwork, no materials/effects/animation — all explicitly out of scope for M01.
+- The ~600ms tab-close data-loss window noted above.
+- Keyboard testing of delete/confirm and "New Project" specifically, and screen-reader testing, were not performed this pass.
+- `packages/config` still has no `lint`/`typecheck` scripts of its own (carried over from M00, not addressed here — out of this milestone's scope).
+
+## Next Milestone
+
+**M02 — Garment Runtime & First 3D Render.** Implement the data-driven garment manifest system (`docs/GARMENT_SPEC.md`) for at least one real garment, and the first `garment-runtime`/`3d-engine` slice that renders it in the Studio canvas — replacing the "3D / 2D preview arrives in a later milestone" placeholder with an actual (even if minimal) garment render driven by the persisted `Project.garment` reference.
 
 ---
-*Last updated: 2026-08-10 (M00 — initial pass + independent review + fixes).*
+*Last updated: 2026-08-10 (M01 — persistence, autosave, real Studio state, independent review, fixes).*

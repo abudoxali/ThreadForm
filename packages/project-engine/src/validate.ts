@@ -3,8 +3,7 @@ import { migrateProject, UnknownSchemaVersionError } from './migrate';
 import { projectSchema } from './schema';
 
 export type ProjectValidationResult =
-  | { success: true; project: Project }
-  | { success: false; error: string };
+  { success: true; project: Project } | { success: false; error: string };
 
 /** Migrates and validates a raw, untrusted value into a `Project`. Never throws. */
 export function validateProject(raw: unknown): ProjectValidationResult {

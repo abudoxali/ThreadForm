@@ -1,37 +1,70 @@
 'use client';
 
 import { useState } from 'react';
-import type { GarmentCategory } from '@threadform/types';
+import { useStudioProject } from '@/hooks/useStudioProject';
 import { StudioTopbar } from './StudioTopbar';
 import { ToolRail, STUDIO_TOOLS } from './ToolRail';
 import type { StudioTool } from './ToolRail';
 import { GarmentPicker } from './GarmentPicker';
 import { Inspector } from './Inspector';
+import { RecentProjects } from './RecentProjects';
+import { NoticeBanner } from './NoticeBanner';
 
 export function StudioShell() {
   const [activeTool, setActiveTool] = useState<StudioTool>('garment');
-  const [selectedCategory, setSelectedCategory] = useState<GarmentCategory | null>(null);
-  const hasGarment = selectedCategory !== null;
+  const {
+    phase,
+    project,
+    recentProjects,
+    saveStatus,
+    isBusy,
+    notice,
+    dismissNotice,
+    chooseGarment,
+    openExistingProject,
+    deleteExistingProject,
+    startNewProject,
+    renameProject,
+  } = useStudioProject();
+
+  const hasProject = project !== null;
 
   function selectTool(tool: StudioTool) {
     const definition = STUDIO_TOOLS.find((t) => t.id === tool);
-    if (definition?.requiresGarment && !hasGarment) return;
+    if (definition?.requiresGarment && !hasProject) return;
     setActiveTool(tool);
   }
 
-  function selectCategory(category: GarmentCategory) {
-    setSelectedCategory(category);
+  function handleChooseGarment(category: Parameters<typeof chooseGarment>[0]) {
+    setActiveTool('garment');
+    void chooseGarment(category);
+  }
+
+  function handleNewProject() {
+    startNewProject();
+    setActiveTool('garment');
   }
 
   const canvas = (
-    <div className="flex flex-1 items-center justify-center overflow-y-auto bg-canvas p-6">
-      {activeTool === 'garment' && !hasGarment ? (
-        <GarmentPicker selected={selectedCategory} onSelect={selectCategory} />
-      ) : (
+    <div className="bg-canvas flex flex-1 items-center justify-center overflow-y-auto p-6">
+      {phase === 'initializing' && <p className="text-tertiary text-sm">Loading your studio…</p>}
+
+      {phase === 'start' && (
+        <div className="w-full">
+          {notice && <NoticeBanner message={notice} onDismiss={dismissNotice} />}
+          <GarmentPicker onSelect={handleChooseGarment} disabled={isBusy} />
+          <RecentProjects
+            projects={recentProjects}
+            onOpen={(id) => void openExistingProject(id)}
+            onDelete={(id) => void deleteExistingProject(id)}
+          />
+        </div>
+      )}
+
+      {phase === 'editing' && (
         <div className="text-center">
-          <p className="text-sm text-tertiary">
-            {hasGarment ? '3D / 2D preview arrives in the next milestone.' : 'Choose a garment to begin.'}
-          </p>
+          {notice && <NoticeBanner message={notice} onDismiss={dismissNotice} />}
+          <p className="text-tertiary text-sm">3D / 2D preview arrives in a later milestone.</p>
         </div>
       )}
     </div>
@@ -39,29 +72,34 @@ export function StudioShell() {
 
   return (
     <div id="main" className="flex h-dvh flex-col">
-      <StudioTopbar projectName="Untitled Project" />
+      <StudioTopbar
+        project={project}
+        saveStatus={saveStatus}
+        onRename={renameProject}
+        onNewProject={handleNewProject}
+      />
 
       {/* Desktop layout: rail | canvas | inspector */}
       <div className="hidden min-h-0 flex-1 md:flex">
-        <ToolRail activeTool={activeTool} hasGarment={hasGarment} onSelect={selectTool} />
+        <ToolRail activeTool={activeTool} hasGarment={hasProject} onSelect={selectTool} />
         {canvas}
-        <Inspector activeTool={activeTool} selectedCategory={selectedCategory} />
+        <Inspector activeTool={activeTool} project={project} />
       </div>
 
       {/* Mobile layout: canvas, collapsible inspector sheet, bottom tool bar */}
       <div className="flex min-h-0 flex-1 flex-col md:hidden">
         {canvas}
-        <details className="border-t border-border bg-surface-raised">
-          <summary className="cursor-pointer list-none px-4 py-2.5 text-sm font-medium text-secondary">
+        <details className="border-border bg-surface-raised border-t">
+          <summary className="text-secondary cursor-pointer list-none px-4 py-2.5 text-sm font-medium">
             Inspector
           </summary>
           <div className="max-h-64 overflow-y-auto">
-            <Inspector activeTool={activeTool} selectedCategory={selectedCategory} />
+            <Inspector activeTool={activeTool} project={project} />
           </div>
         </details>
         <ToolRail
           activeTool={activeTool}
-          hasGarment={hasGarment}
+          hasGarment={hasProject}
           onSelect={selectTool}
           orientation="horizontal"
         />

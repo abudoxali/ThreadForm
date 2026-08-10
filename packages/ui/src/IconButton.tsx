@@ -18,10 +18,10 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       ref={ref}
       type={type}
       className={cx(
-        'inline-flex h-9 w-9 items-center justify-center rounded-md text-secondary transition-colors',
-        'duration-[var(--tf-duration-fast)] ease-[var(--tf-ease-standard)] hover:bg-surface-raised hover:text-primary',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
-        'disabled:opacity-40 disabled:pointer-events-none',
+        'text-secondary inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+        'hover:bg-surface-raised hover:text-primary duration-[var(--tf-duration-fast)] ease-[var(--tf-ease-standard)]',
+        'focus-visible:ring-accent-strong focus-visible:ring-offset-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+        'disabled:pointer-events-none disabled:opacity-40',
         active && 'bg-surface-raised text-accent-strong',
         className,
       )}

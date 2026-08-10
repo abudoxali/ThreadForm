@@ -1,0 +1,31 @@
+{
+  "name": "@threadform/local-storage",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@threadform/project-engine": "workspace:*",
+    "@threadform/types": "workspace:*",
+    "idb": "^8.0.3"
+  },
+  "devDependencies": {
+    "@threadform/config": "workspace:*",
+    "eslint": "^9.18.0",
+    "fake-indexeddb": "^6.2.5",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  }
+}

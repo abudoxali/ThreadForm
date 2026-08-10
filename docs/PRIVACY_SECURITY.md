@@ -1,17 +1,23 @@
 # ThreadForm — Privacy & Security
 
-This describes what M00 actually guarantees and what is architecturally
-intended for later. It does not promise anything the current implementation
+This describes what the current implementation actually guarantees and what
+is architecturally intended for later. It does not promise anything the code
 cannot back up.
 
-## Local-first artwork (intended architecture, not yet implemented)
+## Local-first project data (implemented, M01)
 
-Guest artwork and project data are designed to live in the browser (future
-`local-storage` package, IndexedDB-backed) and are not intended to be
-uploaded anywhere unless the user takes an explicit cloud-sync action after
-opting into an account. **As of M00, no artwork upload or persistence exists
-at all** — this section describes the boundary the next milestone must
-respect, not a shipped guarantee.
+Guest project data — the `Project` document itself (garment reference,
+metadata, name) — is persisted in the browser via IndexedDB
+(`packages/local-storage`) and is never sent to a server: there is no backend
+in this repository, no upload endpoint, and no network call in the save/load
+path. Opening `/studio`, choosing a garment, renaming a project, reloading,
+and switching between local projects all work fully offline once the page
+has loaded.
+
+**Artwork upload does not exist yet** — M01 introduces real project
+persistence, not artwork. `ArtworkLayer`/`ArtworkSource` remain domain types
+only; no UI path creates one yet. The object-URL and SVG-safety guidance
+below is the boundary that artwork upload (a later milestone) must respect.
 
 ## Object URL lifecycle
 

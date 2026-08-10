@@ -10,7 +10,7 @@ Full design rationale: `docs/DESIGN_SYSTEM.md`.
   use `buttonStyles(variant, size)` on the `<Link>`/`<a>` itself instead of
   wrapping it in `<Button>`.
 - Every icon-only control needs an explicit `aria-label`. Every disabled
-  control that still needs to communicate *why* keeps `aria-disabled` + a
+  control that still needs to communicate _why_ keeps `aria-disabled` + a
   `title`, rather than silently vanishing from the tab order.
 - No color-only affordances — pair color with an icon, label, or text change.
 - Respect `prefers-reduced-motion` (the `--tf-duration-*` tokens already

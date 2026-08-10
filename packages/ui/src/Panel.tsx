@@ -10,7 +10,7 @@ export function Panel({ raised, className, ...props }: PanelProps) {
   return (
     <div
       className={cx(
-        'rounded-lg border border-border',
+        'border-border rounded-lg border',
         raised ? 'bg-surface-raised' : 'bg-surface',
         className,
       )}

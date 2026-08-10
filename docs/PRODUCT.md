@@ -31,16 +31,18 @@ artwork placement or garment/material choices that both editors understand.
 
 ## Free vs. Pro
 
-Access is entitlement-based, not mode-based: the Studio checks *what a user is
-entitled to*, not *whether they are logged in*. See `ARCHITECTURE.md` for why
+Access is entitlement-based, not mode-based: the Studio checks _what a user is
+entitled to_, not _whether they are logged in_. See `ARCHITECTURE.md` for why
 this matters architecturally.
 
 **Free** — no signup required:
+
 - Standard garments and templates.
 - Local, browser-only projects.
 - Standard-resolution export, potentially watermarked.
 
 **Pro** (future, not built in M00):
+
 - High-resolution/4K, 60 FPS export, no watermark.
 - Commercial-use entitlement.
 - Premium garments, animations, and effects.

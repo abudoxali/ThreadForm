@@ -23,7 +23,11 @@ export function addArtworkLayer(
   const zoneLayers = project.artworks.filter((l) => l.printZoneId === layer.printZoneId);
   const nextOrder = zoneLayers.length === 0 ? 0 : Math.max(...zoneLayers.map((l) => l.order)) + 1;
   const newLayer: ArtworkLayer = { ...layer, id: createId('artwork'), order: nextOrder };
-  return { ...project, artworks: [...project.artworks, newLayer], metadata: { ...project.metadata, ...touch() } };
+  return {
+    ...project,
+    artworks: [...project.artworks, newLayer],
+    metadata: { ...project.metadata, ...touch() },
+  };
 }
 
 export function removeArtworkLayer(project: Project, layerId: string): Project {
@@ -48,11 +52,19 @@ export function duplicateArtworkLayer(project: Project, layerId: string): Projec
     name: `${source.name} copy`,
     order: nextOrder,
   };
-  return { ...project, artworks: [...project.artworks, copy], metadata: { ...project.metadata, ...touch() } };
+  return {
+    ...project,
+    artworks: [...project.artworks, copy],
+    metadata: { ...project.metadata, ...touch() },
+  };
 }
 
 /** Moves a layer to `targetOrder` within its print zone, shifting others to keep a dense sequence. */
-export function reorderArtworkLayer(project: Project, layerId: string, targetOrder: number): Project {
+export function reorderArtworkLayer(
+  project: Project,
+  layerId: string,
+  targetOrder: number,
+): Project {
   const target = project.artworks.find((l) => l.id === layerId);
   if (!target) return project;
 

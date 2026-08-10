@@ -15,7 +15,9 @@ const garment: GarmentReference = {
   category: 't-shirt',
 };
 
-function stubLayer(printZoneId: ArtworkLayer['printZoneId'] = 'front'): Omit<ArtworkLayer, 'id' | 'order'> {
+function stubLayer(
+  printZoneId: ArtworkLayer['printZoneId'] = 'front',
+): Omit<ArtworkLayer, 'id' | 'order'> {
   return {
     name: 'Logo',
     source: { kind: 'local-blob', blobId: 'blob_1', fileKind: 'png' },

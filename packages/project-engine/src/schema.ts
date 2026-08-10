@@ -32,7 +32,10 @@ import type {
 
 const hexColorSchema = z
   .string()
-  .regex(/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/, 'expected a hex color like #1a1a1a')
+  .regex(
+    /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/,
+    'expected a hex color like #1a1a1a',
+  )
   .transform((value) => value as HexColor);
 
 const vector2Schema = z.object({ x: z.number(), y: z.number() });
@@ -117,7 +120,12 @@ const materialConfigurationSchema = z.object({
   }),
 });
 
-const ARTWORK_FILE_KINDS = ['png', 'jpeg', 'webp', 'svg'] as const satisfies readonly ArtworkFileKind[];
+const ARTWORK_FILE_KINDS = [
+  'png',
+  'jpeg',
+  'webp',
+  'svg',
+] as const satisfies readonly ArtworkFileKind[];
 
 const artworkSourceSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -266,7 +274,12 @@ const EXPORT_IMAGE_FORMATS = [
   'png-transparent',
 ] as const satisfies readonly ExportImageFormat[];
 
-const EXPORT_RESOLUTIONS = ['720p', '1080p', '1440p', '4k'] as const satisfies readonly ExportResolution[];
+const EXPORT_RESOLUTIONS = [
+  '720p',
+  '1080p',
+  '1440p',
+  '4k',
+] as const satisfies readonly ExportResolution[];
 
 const EXPORT_VIDEO_FORMATS = ['webm', 'mp4'] as const satisfies readonly ExportVideoFormat[];
 
@@ -290,7 +303,9 @@ const exportPreferencesSchema = z.object({
     frameRate: z.union([z.literal(24), z.literal(30), z.literal(60)]),
   }),
   aspectRatio: z.enum(EXPORT_ASPECT_RATIOS),
-  customAspectRatio: z.object({ width: z.number().positive(), height: z.number().positive() }).optional(),
+  customAspectRatio: z
+    .object({ width: z.number().positive(), height: z.number().positive() })
+    .optional(),
 });
 
 const STUDIO_MODES = ['2d', '3d'] as const satisfies readonly StudioMode[];

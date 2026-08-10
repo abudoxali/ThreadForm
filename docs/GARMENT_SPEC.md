@@ -25,13 +25,19 @@ asset.
       "front": "Mesh_Front",
       "back": "Mesh_Back",
       "leftSleeve": "Mesh_Sleeve_L",
-      "rightSleeve": "Mesh_Sleeve_R"
-    }
+      "rightSleeve": "Mesh_Sleeve_R",
+    },
   },
 
   "printZones": [
     { "id": "front", "label": "Front", "maxWidth": 0.8, "maxHeight": 0.9, "uvChannel": 0 },
-    { "id": "left-chest", "label": "Left Chest", "maxWidth": 0.2, "maxHeight": 0.2, "uvChannel": 0 }
+    {
+      "id": "left-chest",
+      "label": "Left Chest",
+      "maxWidth": 0.2,
+      "maxHeight": 0.2,
+      "uvChannel": 0,
+    },
   ],
 
   "supportedMaterials": ["cotton", "heavyweight-cotton", "jersey"],
@@ -41,12 +47,12 @@ asset.
   "cameraPresets": ["front", "three-quarter", "back"],
 
   "thumbnails": {
-    "preview": "garments/classic-tee/1.0.0/thumb.webp"
+    "preview": "garments/classic-tee/1.0.0/thumb.webp",
   },
 
   "assetIntegrity": {
-    "modelSha256": "…"
-  }
+    "modelSha256": "…",
+  },
 }
 ```
 

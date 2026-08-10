@@ -22,17 +22,17 @@
 Defined as CSS custom properties in `packages/ui/src/tokens.css`, prefixed
 `--tf-`. Consumers (currently `apps/web`) map these into their own theme layer
 (a Tailwind v4 `@theme` block) rather than reading `--tf-*` directly, so the
-token *names* are stable even if the mapping technology changes.
+token _names_ are stable even if the mapping technology changes.
 
-| Token | Dark (default) | Purpose |
-|---|---|---|
-| `--tf-color-bg-canvas` | `#0b0b0c` | App background / 3D viewport backdrop |
-| `--tf-color-bg-surface` | `#131315` | Panels, cards |
-| `--tf-color-bg-surface-raised` | `#1b1b1e` | Popovers, raised panels |
-| `--tf-color-border` / `-strong` | `#2a2a2e` / `#3a3a40` | Hairlines / emphasized borders |
-| `--tf-color-text-primary/secondary/tertiary` | `#f2f1ee` / `#a8a7a3` / `#6f6e6b` | Text hierarchy |
-| `--tf-color-accent` / `-strong` | `#d98a4a` / `#f0a25f` | Primary actions, active state |
-| `--tf-color-danger/success/warning` | — | Feedback states |
+| Token                                        | Dark (default)                    | Purpose                               |
+| -------------------------------------------- | --------------------------------- | ------------------------------------- |
+| `--tf-color-bg-canvas`                       | `#0b0b0c`                         | App background / 3D viewport backdrop |
+| `--tf-color-bg-surface`                      | `#131315`                         | Panels, cards                         |
+| `--tf-color-bg-surface-raised`               | `#1b1b1e`                         | Popovers, raised panels               |
+| `--tf-color-border` / `-strong`              | `#2a2a2e` / `#3a3a40`             | Hairlines / emphasized borders        |
+| `--tf-color-text-primary/secondary/tertiary` | `#f2f1ee` / `#a8a7a3` / `#6f6e6b` | Text hierarchy                        |
+| `--tf-color-accent` / `-strong`              | `#d98a4a` / `#f0a25f`             | Primary actions, active state         |
+| `--tf-color-danger/success/warning`          | —                                 | Feedback states                       |
 
 A light theme is defined under `:root[data-theme='light']` so a future theme
 switch requires no new token names — only a value swap.
@@ -80,5 +80,5 @@ hover-only affordances.
 Semantic HTML first (`<button>`, `<nav aria-label>`, real headings) — ARIA
 only where native semantics run out (e.g. `aria-pressed` on a toggle-style
 icon button). Every icon-only control has an explicit `aria-label`. Disabled
-controls that still need to communicate *why* keep `aria-disabled` + a
+controls that still need to communicate _why_ keep `aria-disabled` + a
 `title` rather than removing the element from the tab order silently.

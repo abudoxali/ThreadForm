@@ -32,7 +32,7 @@ Rewrite `STATUS.md` in place (single canonical file) with:
 
 - Project, current milestone, milestone state (in progress / complete /
   partial).
-- Honest completion percentage for the milestone *and* the overall project —
+- Honest completion percentage for the milestone _and_ the overall project —
   not rounded up to look better.
 - Completed work, as a concrete list.
 - Acceptance criteria, checked off only where actually verified.

@@ -16,7 +16,10 @@ export interface CreateProjectOptions {
 }
 
 /** Builds a new project in its default state for a freshly chosen garment. */
-export function createProject(garment: GarmentReference, options: CreateProjectOptions = {}): Project {
+export function createProject(
+  garment: GarmentReference,
+  options: CreateProjectOptions = {},
+): Project {
   const now = new Date().toISOString();
   return {
     schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,

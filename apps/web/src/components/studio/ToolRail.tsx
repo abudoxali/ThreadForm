@@ -9,9 +9,15 @@ import {
   SceneIcon,
 } from './icons';
 
-export type StudioTool = 'garment' | 'artwork' | 'material' | 'effects' | 'scene' | 'animation' | 'export';
+export type StudioTool =
+  'garment' | 'artwork' | 'material' | 'effects' | 'scene' | 'animation' | 'export';
 
-export const STUDIO_TOOLS: Array<{ id: StudioTool; label: string; icon: typeof GarmentIcon; requiresGarment: boolean }> = [
+export const STUDIO_TOOLS: Array<{
+  id: StudioTool;
+  label: string;
+  icon: typeof GarmentIcon;
+  requiresGarment: boolean;
+}> = [
   { id: 'garment', label: 'Garment', icon: GarmentIcon, requiresGarment: false },
   { id: 'artwork', label: 'Artwork', icon: ArtworkIcon, requiresGarment: true },
   { id: 'material', label: 'Material', icon: MaterialIcon, requiresGarment: true },
@@ -28,14 +34,19 @@ export interface ToolRailProps {
   orientation?: 'vertical' | 'horizontal';
 }
 
-export function ToolRail({ activeTool, hasGarment, onSelect, orientation = 'vertical' }: ToolRailProps) {
+export function ToolRail({
+  activeTool,
+  hasGarment,
+  onSelect,
+  orientation = 'vertical',
+}: ToolRailProps) {
   return (
     <nav
       aria-label="Studio tools"
       className={
         orientation === 'vertical'
-          ? 'flex w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-surface py-3'
-          : 'flex items-center gap-1 overflow-x-auto border-t border-border bg-surface px-2 py-2'
+          ? 'border-border bg-surface flex w-16 shrink-0 flex-col items-center gap-1 border-r py-3'
+          : 'border-border bg-surface flex items-center gap-1 overflow-x-auto border-t px-2 py-2'
       }
     >
       {STUDIO_TOOLS.map((tool) => {

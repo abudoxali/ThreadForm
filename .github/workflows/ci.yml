@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Format check
+        run: pnpm format:check
+
       - name: Lint
         run: pnpm lint
 
@@ -38,3 +41,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @threadform/web exec playwright install --with-deps chromium
+
+      - name: E2E
+        run: pnpm --filter @threadform/web test:e2e

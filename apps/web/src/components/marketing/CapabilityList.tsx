@@ -19,16 +19,16 @@ const capabilities = [
 
 export function CapabilityList() {
   return (
-    <section id="capabilities" className="border-t border-border py-16 sm:py-24">
+    <section id="capabilities" className="border-border border-t py-16 sm:py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <h2 className="text-2xl font-semibold tracking-tight text-primary sm:text-3xl">
+        <h2 className="text-primary text-2xl font-semibold tracking-tight sm:text-3xl">
           Built for the whole mockup, not just the print.
         </h2>
         <div className="mt-10 grid gap-x-12 gap-y-10 sm:grid-cols-2">
           {capabilities.map((capability) => (
-            <div key={capability.title} className="border-t border-border pt-5">
-              <h3 className="text-lg font-medium text-primary">{capability.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-secondary">{capability.body}</p>
+            <div key={capability.title} className="border-border border-t pt-5">
+              <h3 className="text-primary text-lg font-medium">{capability.title}</h3>
+              <p className="text-secondary mt-2 text-sm leading-relaxed">{capability.body}</p>
             </div>
           ))}
         </div>

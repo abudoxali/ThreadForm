@@ -19,17 +19,19 @@ const steps = [
 
 export function WorkflowSteps() {
   return (
-    <section id="workflow" className="border-t border-border py-16 sm:py-24">
+    <section id="workflow" className="border-border border-t py-16 sm:py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <h2 className="text-2xl font-semibold tracking-tight text-primary sm:text-3xl">
+        <h2 className="text-primary text-2xl font-semibold tracking-tight sm:text-3xl">
           One project, from artwork to export.
         </h2>
         <ol className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {steps.map((step, index) => (
             <li key={step.title}>
-              <span className="text-sm font-medium text-accent">{String(index + 1).padStart(2, '0')}</span>
-              <h3 className="mt-2 text-lg font-medium text-primary">{step.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-secondary">{step.body}</p>
+              <span className="text-accent text-sm font-medium">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <h3 className="text-primary mt-2 text-lg font-medium">{step.title}</h3>
+              <p className="text-secondary mt-2 text-sm leading-relaxed">{step.body}</p>
             </li>
           ))}
         </ol>

@@ -13,16 +13,23 @@ pnpm workspaces + Turborepo.
 apps/web              Next.js app — marketing site (/) and Studio shell (/studio)
 packages/types         Strict TS domain contracts (Project, Garment, Material, ...)
 packages/project-engine  Pure functions: create/validate/migrate/mutate a Project
+packages/local-storage   IndexedDB persistence adapter (save/load/list/delete a Project)
 packages/ui             Design tokens (tokens.css) + presentational React primitives
 packages/config         Shared tsconfig + ESLint flat configs
 docs/                  Product, architecture, design, schema, garment, export, privacy specs
 ```
 
+`apps/web/src/lib/projectRepository.ts` is the only place that combines
+`project-engine` (domain logic) with `local-storage` (persistence); the
+`useStudioProject` hook (`apps/web/src/hooks`) is the only place that wires
+that repository into React state (debounced autosave, restore-on-mount).
+Components call the hook, never the repository or `local-storage` directly.
+
 Other packages named in `docs/ARCHITECTURE.md` (garment-runtime, 3d-engine,
 2d-engine, material-engine, effects-engine, animation-engine, export-engine,
-local-storage, entitlements, analytics) are **documented boundaries, not yet
-implemented**. Do not create empty placeholder packages for them — build them
-when there is real logic to put inside.
+entitlements, analytics) are **documented boundaries, not yet implemented**.
+Do not create empty placeholder packages for them — build them when there is
+real logic to put inside.
 
 ## Commands
 
@@ -31,8 +38,9 @@ Run from the repo root (Turborepo fans out per package):
 - `pnpm install` — install (uses the lockfile; never skip it in CI).
 - `pnpm dev` — run the web app locally.
 - `pnpm lint` / `pnpm typecheck` / `pnpm test` — per-package via Turborepo.
-- `pnpm test:e2e` — Playwright smoke tests (`apps/web/e2e`); requires a build
-  (`pnpm --filter @threadform/web build`) since it drives `next start`.
+- `pnpm test:e2e` — Playwright suite (`apps/web/e2e`), run in CI; requires a
+  build first (`pnpm --filter @threadform/web build`) since it drives
+  `next start`. Chromium only — `npx playwright install chromium` once locally.
 - `pnpm build` — production build of every package/app.
 - `pnpm format` / `pnpm format:check` — Prettier.
 
