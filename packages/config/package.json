@@ -1,0 +1,21 @@
+{
+  "name": "@threadform/config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "exports": {
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig/nextjs.json": "./tsconfig/nextjs.json",
+    "./eslint/base": "./eslint/base.mjs",
+    "./eslint/nextjs": "./eslint/nextjs.mjs"
+  },
+  "files": [
+    "tsconfig",
+    "eslint"
+  ],
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
+    "typescript-eslint": "^8.19.1"
+  }
+}

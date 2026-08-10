@@ -1,0 +1,55 @@
+@import 'tailwindcss';
+@source '../../../../packages/ui/src';
+@import '@threadform/ui/tokens.css';
+
+@theme {
+  --color-canvas: var(--tf-color-bg-canvas);
+  --color-surface: var(--tf-color-bg-surface);
+  --color-surface-raised: var(--tf-color-bg-surface-raised);
+  --color-overlay: var(--tf-color-bg-overlay);
+
+  --color-border: var(--tf-color-border);
+  --color-border-strong: var(--tf-color-border-strong);
+
+  --color-primary: var(--tf-color-text-primary);
+  --color-secondary: var(--tf-color-text-secondary);
+  --color-tertiary: var(--tf-color-text-tertiary);
+  --color-disabled: var(--tf-color-text-disabled);
+
+  --color-accent: var(--tf-color-accent);
+  --color-accent-strong: var(--tf-color-accent-strong);
+  --color-accent-muted: var(--tf-color-accent-muted);
+  --color-accent-ink: var(--tf-color-accent-ink);
+
+  --color-danger: var(--tf-color-danger);
+  --color-success: var(--tf-color-success);
+  --color-warning: var(--tf-color-warning);
+
+  --font-sans: var(--tf-font-sans);
+  --font-mono: var(--tf-font-mono);
+
+  --radius-sm: var(--tf-radius-sm);
+  --radius-md: var(--tf-radius-md);
+  --radius-lg: var(--tf-radius-lg);
+
+  --shadow-panel: var(--tf-shadow-md);
+  --shadow-popover: var(--tf-shadow-lg);
+
+  --ease-standard: var(--tf-ease-standard);
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-primary);
+    font-family: var(--font-sans);
+  }
+
+  * {
+    border-color: var(--color-border);
+  }
+}

@@ -1,0 +1,117 @@
+/**
+ * ThreadForm design tokens — see docs/DESIGN_SYSTEM.md for rationale.
+ * Dark-first. Consumers map these `--tf-*` primitives into their own
+ * theme layer (e.g. a Tailwind v4 `@theme` block) rather than reading
+ * them directly, so the token *names* stay stable even if the mapping
+ * changes.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --tf-color-bg-canvas: #0b0b0c;
+  --tf-color-bg-surface: #131315;
+  --tf-color-bg-surface-raised: #1b1b1e;
+  --tf-color-bg-overlay: #1b1b1ecc;
+
+  /* Borders */
+  --tf-color-border: #2a2a2e;
+  --tf-color-border-strong: #3a3a40;
+
+  /* Text */
+  --tf-color-text-primary: #f2f1ee;
+  --tf-color-text-secondary: #a8a7a3;
+  --tf-color-text-tertiary: #6f6e6b;
+  --tf-color-text-disabled: #4a4a49;
+
+  /* Accent — warm copper, evokes thread/stitching rather than generic SaaS purple */
+  --tf-color-accent: #d98a4a;
+  --tf-color-accent-strong: #f0a25f;
+  --tf-color-accent-muted: #d98a4a26;
+  --tf-color-accent-ink: #1c1006;
+
+  /* Feedback */
+  --tf-color-danger: #e5654f;
+  --tf-color-success: #6fae7f;
+  --tf-color-warning: #dbb24f;
+
+  /* Focus */
+  --tf-color-focus-ring: #f0a25f;
+
+  /* Typography */
+  --tf-font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, Helvetica, Arial, sans-serif;
+  --tf-font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+
+  /* Spacing scale (4px base) */
+  --tf-space-1: 0.25rem;
+  --tf-space-2: 0.5rem;
+  --tf-space-3: 0.75rem;
+  --tf-space-4: 1rem;
+  --tf-space-5: 1.25rem;
+  --tf-space-6: 1.5rem;
+  --tf-space-8: 2rem;
+  --tf-space-10: 2.5rem;
+  --tf-space-12: 3rem;
+  --tf-space-16: 4rem;
+
+  /* Radii — restrained, not pill-shaped everything */
+  --tf-radius-sm: 0.25rem;
+  --tf-radius-md: 0.5rem;
+  --tf-radius-lg: 0.75rem;
+  --tf-radius-full: 9999px;
+
+  /* Shadows — subtle, for a dark canvas */
+  --tf-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --tf-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --tf-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  /* Motion */
+  --tf-duration-fast: 120ms;
+  --tf-duration-base: 200ms;
+  --tf-duration-slow: 320ms;
+  --tf-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Reserved for a future light theme — opting in via [data-theme="light"] on
+   the root element keeps the dark palette above as the unconditional default. */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --tf-color-bg-canvas: #f7f6f3;
+  --tf-color-bg-surface: #ffffff;
+  --tf-color-bg-surface-raised: #ffffff;
+  --tf-color-bg-overlay: #ffffffcc;
+
+  --tf-color-border: #e3e1db;
+  --tf-color-border-strong: #cfccc3;
+
+  --tf-color-text-primary: #1a1a19;
+  --tf-color-text-secondary: #55534d;
+  --tf-color-text-tertiary: #85837c;
+  --tf-color-text-disabled: #b3b1a9;
+
+  --tf-color-accent: #b8622a;
+  --tf-color-accent-strong: #9c531f;
+  --tf-color-accent-muted: #b8622a1a;
+  --tf-color-accent-ink: #fff7ef;
+
+  --tf-color-danger: #c14a35;
+  --tf-color-success: #3f7a52;
+  --tf-color-warning: #a5791f;
+
+  --tf-color-focus-ring: #9c531f;
+
+  --tf-shadow-sm: 0 1px 2px rgba(20, 18, 12, 0.08);
+  --tf-shadow-md: 0 4px 16px rgba(20, 18, 12, 0.1);
+  --tf-shadow-lg: 0 12px 32px rgba(20, 18, 12, 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --tf-duration-fast: 0ms;
+    --tf-duration-base: 0ms;
+    --tf-duration-slow: 0ms;
+  }
+}
