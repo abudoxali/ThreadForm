@@ -9,9 +9,9 @@ Application / Project State (a Project value — see PROJECT_SCHEMA.md)
         ↓
 Domain Engines (project-engine, and future material/effects/animation/export engines)
         ↓
-Garment Runtime (future — resolves a GarmentReference against a manifest)
+Garment Runtime (garment-runtime — resolves a GarmentReference against a manifest)
         ↓
-Renderer / Persistence / Export adapters (future 3d-engine, 2d-engine; local-storage implemented)
+Renderer / Persistence / Export adapters (3d-engine, local-storage implemented; 2d-engine, export-engine future)
 ```
 
 Dependencies point downward only. A package never imports something above it
@@ -39,28 +39,27 @@ architecture exists to prevent. Concretely:
   `reorderArtworkLayer`, etc.) — components call these functions and re-render
   from the result; they do not hand-edit a `Project` object's fields.
 
-## Current physical packages (M00–M01)
+## Current physical packages (M00–M02)
 
-| Package                   | Responsibility                                                                                                                                                                                                                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/types`          | Strict TypeScript contracts for the project domain model. Zero runtime _dependencies_ — its only runtime code is the `CURRENT_PROJECT_SCHEMA_VERSION` constant.                                                                                                                                               |
-| `packages/project-engine` | Creates, validates, migrates and mutates `Project` values. Pure functions; no React, no storage, no rendering.                                                                                                                                                                                                |
-| `packages/local-storage`  | IndexedDB persistence adapter (via `idb`): save/load/list/delete a `Project`, plus a small "last opened project" pointer. Depends on `project-engine` for `validateProject`/`migrateProject` on every read; no React.                                                                                         |
-| `packages/ui`             | Design-token CSS and presentational React primitives (`Button`, `Panel`, `IconButton`, ...). No domain knowledge.                                                                                                                                                                                             |
-| `packages/config`         | Shared `tsconfig` and ESLint flat configs consumed by every package.                                                                                                                                                                                                                                          |
-| `apps/web`                | The Next.js application: marketing site (`/`) and Studio (`/studio`). `src/lib/projectRepository.ts` is the only module that combines `project-engine` + `local-storage`; `src/hooks/useStudioProject.ts` is the only place that wires it into React state. Components hold only UI-only state (active tool). |
+| Package                    | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/types`           | Strict TypeScript contracts for the project domain model. Zero runtime _dependencies_ — its only runtime code is the `CURRENT_PROJECT_SCHEMA_VERSION` constant.                                                                                                                                                                                                                                                                  |
+| `packages/project-engine`  | Creates, validates, migrates and mutates `Project` values. Pure functions; no React, no storage, no rendering.                                                                                                                                                                                                                                                                                                                   |
+| `packages/local-storage`   | IndexedDB persistence adapter (via `idb`): save/load/list/delete a `Project`, plus a small "last opened project" pointer. Depends on `project-engine` for `validateProject`/`migrateProject` on every read; no React.                                                                                                                                                                                                            |
+| `packages/garment-runtime` | Fetches and zod-validates a garment manifest (`GARMENT_SPEC.md`), the small catalog of garments with a real manifest, camera preset definitions, and `resolveGarmentReference` (maps a `Project`'s `GarmentReference` — including M01's placeholder shape — to a real, loadable garment). No React, no Three.js.                                                                                                                 |
+| `packages/3d-engine`       | React Three Fiber rendering: `StudioGarmentCanvas` (Canvas + error boundary + Suspense loading state), `GarmentModel` (GLB load via drei's `useGLTF`, per-instance material clone, color), `CameraRig` (orbit controls + preset framing), `StudioLighting` (3-point rig), `frameGarment` (pure bounding-sphere/aspect-ratio framing math, unit-tested without a GPU).                                                            |
+| `packages/ui`              | Design-token CSS and presentational React primitives (`Button`, `Panel`, `IconButton`, ...). No domain knowledge.                                                                                                                                                                                                                                                                                                                |
+| `packages/config`          | Shared `tsconfig` and ESLint flat configs consumed by every package.                                                                                                                                                                                                                                                                                                                                                             |
+| `apps/web`                 | The Next.js application: marketing site (`/`) and Studio (`/studio`). `src/lib/projectRepository.ts` is the only module that combines `project-engine` + `local-storage`; `src/hooks/useStudioProject.ts` is the only place that wires it into React state; `src/hooks/useResolvedGarment.ts` is the only place that resolves a `Project`'s garment against `garment-runtime`. Components hold only UI-only state (active tool). |
 
 ## Documented future boundaries (not yet implemented)
 
 These are named and scoped now so the first real implementation has an
 obvious home, not because empty packages should exist yet:
 
-- **`garment-runtime`** — resolves a `GarmentReference` + manifest into
-  whatever the 3D/2D engines need (geometry reference, UV expectations,
-  available print zones). See `GARMENT_SPEC.md`.
-- **`3d-engine`** / **`2d-engine`** — rendering adapters. Distinct packages
-  because they have different technology needs (WebGL/WebGPU vs. canvas/DOM)
-  but consume the same `Project`.
+- **`2d-engine`** — the flat/print-mockup rendering adapter, alongside
+  `3d-engine`. Different technology needs (canvas/DOM vs. WebGL) but consumes
+  the same `Project`.
 - **`material-engine`**, **`effects-engine`**, **`animation-engine`** —
   resolve `MaterialConfiguration` / `EffectConfiguration` /
   `AnimationConfiguration` into renderer-specific parameters. Kept separate
@@ -116,3 +115,43 @@ modes that matter once writes are asynchronous and user-triggered:
 
 See `packages/local-storage`'s own module docs (`src/db.ts`) for the
 IndexedDB schema itself.
+
+## Garment resolution & rendering (M02)
+
+`useResolvedGarment` (`apps/web/src/hooks`) is the only place a `Project`'s
+`GarmentReference` is turned into a loadable garment. It calls
+`garment-runtime`'s `resolveGarmentReference` (catalog lookup, plus M01
+placeholder-reference compatibility — see below), then `loadManifest`
+(fetches and zod-validates `/garments/<id>/manifest.json`, the same
+untrusted-until-validated boundary pattern as `local-storage`'s
+`validateProject`). `StudioShell` renders `3d-engine`'s
+`StudioGarmentCanvas` from the resolved manifest plus the `Project`'s
+`garmentColor`/`camera` fields — never inline Three.js/`@react-three/fiber`
+in a Studio panel component.
+
+**Legacy reference compatibility.** M01 persisted a placeholder
+`GarmentReference` (`{ garmentId: category, garmentVersion: '0.0.0',
+category }`) before any manifest system existed. `resolveGarmentReference`
+recognizes that exact placeholder shape and maps it to a real catalog
+garment **only when the category matches** — it never maps an unrelated
+category to whatever garment happens to exist, and never touches a
+reference that isn't provably the M01 placeholder shape. A category with no
+real garment yet resolves to `'unavailable'`, which the Studio surfaces as
+an honest "not available in this build" state, leaving the stored project
+untouched.
+
+**Color and camera stay `Project` state, not manifest mutation.**
+`setGarmentColor`/`setCameraPreset` (`useStudioProject`) write to
+`Project.garmentColor`/`Project.camera` through the same `updateProject` →
+debounced-autosave path as every other edit; the garment manifest itself is
+never mutated. `GarmentModel` clones the GLB's material per mesh instance
+before applying color, so one project's color change can never leak into
+drei's shared `useGLTF` cache or another open instance of the same garment.
+
+**Frame loop.** The canvas runs `frameloop="demand"` (no continuous
+render loop while idle). Anything that mutates the scene outside of a JSX
+prop change (a material color, an imperative camera move) must call R3F's
+`invalidate()` itself — drei's `OrbitControls` does this internally for
+user-driven orbiting, but `GarmentModel`'s color effect and `CameraRig`'s
+preset-framing effect call it explicitly, since a demand frame loop does not
+infer that a `useEffect` mutated something it should redraw.

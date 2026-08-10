@@ -80,6 +80,20 @@ the database name/version/store layout, and `docs/ARCHITECTURE.md`'s
 "Project repository & autosave" section for how `apps/web` debounces writes
 and restores the last-opened project on mount.
 
+## Garment rendering (M02)
+
+`garment`, `garmentColor`, and `camera` are no longer inert fields — as of
+M02 they drive a real 3D render. `useResolvedGarment`
+(`apps/web/src/hooks`) resolves `garment` (a `GarmentReference`) against
+`packages/garment-runtime`'s catalog/manifest; `packages/3d-engine`'s
+`StudioGarmentCanvas` renders the result using `garmentColor.hex` and the
+camera preset in `camera.presetId`. See `GARMENT_SPEC.md` for the manifest
+shape and `ARCHITECTURE.md`'s "Garment resolution & rendering" section for
+the M01-placeholder compatibility path. `material`, `artworks`, `printZones`,
+`effects`, `animation`, and `background` remain unconsumed — the schema
+models them ahead of the milestones that will read them, per this doc's
+original design intent.
+
 ## Non-trivial domain behavior
 
 `packages/project-engine/src/layers.ts` implements artwork-layer operations

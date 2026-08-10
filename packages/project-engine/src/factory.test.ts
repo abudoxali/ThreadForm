@@ -28,4 +28,14 @@ describe('createProject', () => {
     const b = createProject(garment);
     expect(a.metadata.id).not.toBe(b.metadata.id);
   });
+
+  it('defaults garmentColor to natural off-white when no override is given', () => {
+    const project = createProject(garment);
+    expect(project.garmentColor.hex).toBe('#f5f5f0');
+  });
+
+  it('uses a provided garmentColor override (e.g. a garment manifest default) instead', () => {
+    const project = createProject(garment, { garmentColor: { hex: '#1a1a1a', label: 'Black' } });
+    expect(project.garmentColor).toEqual({ hex: '#1a1a1a', label: 'Black' });
+  });
 });

@@ -7,7 +7,9 @@ creating an account.
 
 This is a greenfield project. See `docs/PRODUCT.md` for what ThreadForm is,
 `docs/ARCHITECTURE.md` for how it's structured, and `STATUS.md` for exactly
-what's implemented right now.
+what's implemented right now — as of M02, the Studio renders a real,
+original 3D garment (WebGL, camera presets, color) with local-first
+persistence; artwork/materials/effects/animation/export are still ahead.
 
 ## Getting started
 
@@ -19,12 +21,15 @@ pnpm dev        # apps/web on http://localhost:3000
 ## Workspace
 
 ```
-apps/web              Next.js app — marketing site (/) and Studio (/studio), with local-first project persistence
+apps/web              Next.js app — marketing site (/) and Studio (/studio), with local-first project persistence and a real 3D garment render
 packages/types         Strict TypeScript domain contracts
 packages/project-engine  Create/validate/migrate/mutate a Project
 packages/local-storage   IndexedDB persistence adapter for guest projects
+packages/garment-runtime  Garment manifest schema, catalog, camera presets, legacy-reference resolution
+packages/3d-engine       React Three Fiber garment canvas: loading, lighting, camera framing, color
 packages/ui             Design tokens + presentational React primitives
 packages/config         Shared tsconfig + ESLint configs
+assets/garments/         Source-of-truth original garment assets (GLB + manifest + provenance)
 docs/                  Product, architecture, design, schema, garment, export, privacy specs
 ```
 

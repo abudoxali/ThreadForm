@@ -1,4 +1,5 @@
 import { createProject } from '@threadform/project-engine';
+import type { CreateProjectOptions } from '@threadform/project-engine';
 import type { GarmentReference, Project } from '@threadform/types';
 import {
   clearLastOpenedProjectId,
@@ -21,9 +22,9 @@ import type { ProjectSummary } from '@threadform/local-storage';
 
 export async function createAndPersistProject(
   garment: GarmentReference,
-  name: string,
+  options: CreateProjectOptions,
 ): Promise<Project> {
-  const project = createProject(garment, { name });
+  const project = createProject(garment, options);
   await saveProject(project);
   await setLastOpenedProjectId(project.metadata.id);
   return project;

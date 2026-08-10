@@ -19,6 +19,18 @@ persistence, not artwork. `ArtworkLayer`/`ArtworkSource` remain domain types
 only; no UI path creates one yet. The object-URL and SVG-safety guidance
 below is the boundary that artwork upload (a later milestone) must respect.
 
+## Garment assets (M02)
+
+M02 introduces the Studio's first `fetch()` calls: `packages/garment-runtime`
+loads a garment's `manifest.json`, and `@react-three/drei`'s `useGLTF` loads
+its `model.glb`. Both are same-origin requests to files `apps/web` serves
+from its own `public/garments/` directory (copied from the versioned
+`assets/garments/` source of truth) — no third-party host, no user data sent
+in the request, and no project/artwork content leaves the browser. The
+manifest response is zod-validated before use (same untrusted-until-validated
+pattern as a stored `Project`); an invalid or unreachable manifest surfaces
+as an honest error state, never a silent fallback to guessed data.
+
 ## Object URL lifecycle
 
 `ArtworkSource` (`packages/types/src/artwork.ts`) deliberately stores a

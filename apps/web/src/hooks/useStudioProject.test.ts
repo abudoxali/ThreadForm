@@ -1,15 +1,25 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GarmentReference, Project } from '@threadform/types';
+import type * as GarmentRuntimeModule from '@threadform/garment-runtime';
 import { createProject } from '@threadform/project-engine';
 import * as repository from '@/lib/projectRepository';
+import { ESSENTIAL_TEE_MANIFEST } from '@/test-utils/garmentFixture';
 import { useStudioProject } from './useStudioProject';
 
 vi.mock('@/lib/projectRepository');
 
+vi.mock('@threadform/garment-runtime', async (importOriginal) => {
+  const actual = await importOriginal<typeof GarmentRuntimeModule>();
+  return {
+    ...actual,
+    loadManifest: vi.fn().mockResolvedValue({ success: true, manifest: ESSENTIAL_TEE_MANIFEST }),
+  };
+});
+
 const garment: GarmentReference = {
-  garmentId: 't-shirt',
-  garmentVersion: '0.0.0',
+  garmentId: 'threadform-essential-tee',
+  garmentVersion: '1.0.0',
   category: 't-shirt',
 };
 
@@ -58,8 +68,8 @@ describe('useStudioProject — initial load', () => {
 });
 
 describe('useStudioProject — chooseGarment', () => {
-  it('creates and persists a project, then enters the editing phase', async () => {
-    const created = buildProject('T-Shirt Project');
+  it('resolves the manifest, then creates and persists a project from it', async () => {
+    const created = buildProject('ThreadForm Essential Tee Project');
     mocked.createAndPersistProject.mockResolvedValue(created);
 
     const { result } = renderHook(() => useStudioProject());
@@ -68,12 +78,12 @@ describe('useStudioProject — chooseGarment', () => {
     });
 
     await act(async () => {
-      await result.current.chooseGarment('t-shirt');
+      await result.current.chooseGarment('threadform-essential-tee');
     });
 
     expect(mocked.createAndPersistProject).toHaveBeenCalledWith(
-      { garmentId: 't-shirt', garmentVersion: '0.0.0', category: 't-shirt' },
-      'T-Shirt Project',
+      { garmentId: 'threadform-essential-tee', garmentVersion: '1.0.0', category: 't-shirt' },
+      { name: 'ThreadForm Essential Tee Project', garmentColor: { hex: '#f5f5f0' } },
     );
     expect(result.current.phase).toBe('editing');
     expect(result.current.saveStatus).toBe('saved');
@@ -88,11 +98,29 @@ describe('useStudioProject — chooseGarment', () => {
     });
 
     await act(async () => {
-      await result.current.chooseGarment('hoodie');
+      await result.current.chooseGarment('threadform-essential-tee');
     });
 
     expect(result.current.phase).toBe('start');
     expect(result.current.notice).toMatch(/couldn't create your project/i);
+  });
+
+  it('surfaces a restrained notice when the manifest itself cannot be resolved, without creating a project', async () => {
+    const { loadManifest } = await import('@threadform/garment-runtime');
+    vi.mocked(loadManifest).mockResolvedValueOnce({ success: false, error: 'HTTP 404' });
+
+    const { result } = renderHook(() => useStudioProject());
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    await act(async () => {
+      await result.current.chooseGarment('threadform-essential-tee');
+    });
+
+    expect(mocked.createAndPersistProject).not.toHaveBeenCalled();
+    expect(result.current.phase).toBe('start');
+    expect(result.current.notice).toMatch(/couldn't load that garment/i);
   });
 });
 
@@ -107,7 +135,7 @@ describe('useStudioProject — renameProject autosave', () => {
       await vi.runAllTimersAsync();
     });
     await act(async () => {
-      await result.current.chooseGarment('t-shirt');
+      await result.current.chooseGarment('threadform-essential-tee');
     });
 
     act(() => {
@@ -137,7 +165,7 @@ describe('useStudioProject — renameProject autosave', () => {
       await vi.runAllTimersAsync();
     });
     await act(async () => {
-      await result.current.chooseGarment('t-shirt');
+      await result.current.chooseGarment('threadform-essential-tee');
     });
 
     act(() => {
@@ -166,7 +194,7 @@ describe('useStudioProject — renameProject autosave', () => {
       await vi.runAllTimersAsync();
     });
     await act(async () => {
-      await result.current.chooseGarment('t-shirt');
+      await result.current.chooseGarment('threadform-essential-tee');
     });
 
     act(() => {
@@ -181,6 +209,82 @@ describe('useStudioProject — renameProject autosave', () => {
   });
 });
 
+describe('useStudioProject — setGarmentColor', () => {
+  it('updates the project color and autosaves it', async () => {
+    const created = buildProject('Original');
+    mocked.createAndPersistProject.mockResolvedValue(created);
+    mocked.saveProjectChanges.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useStudioProject());
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    await act(async () => {
+      await result.current.chooseGarment('threadform-essential-tee');
+    });
+
+    act(() => {
+      result.current.setGarmentColor('#1a1a1a');
+    });
+    expect(result.current.project?.garmentColor.hex).toBe('#1a1a1a');
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    expect(mocked.saveProjectChanges).toHaveBeenCalledWith(
+      expect.objectContaining({ garmentColor: expect.objectContaining({ hex: '#1a1a1a' }) }),
+    );
+  });
+
+  it('rejects a malformed color value rather than persisting it', async () => {
+    const created = buildProject('Original');
+    mocked.createAndPersistProject.mockResolvedValue(created);
+
+    const { result } = renderHook(() => useStudioProject());
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    await act(async () => {
+      await result.current.chooseGarment('threadform-essential-tee');
+    });
+
+    const before = result.current.project?.garmentColor.hex;
+    act(() => {
+      result.current.setGarmentColor('not-a-color');
+    });
+    expect(result.current.project?.garmentColor.hex).toBe(before);
+  });
+});
+
+describe('useStudioProject — setCameraPreset', () => {
+  it('updates the camera configuration from the preset and autosaves it', async () => {
+    const created = buildProject('Original');
+    mocked.createAndPersistProject.mockResolvedValue(created);
+    mocked.saveProjectChanges.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useStudioProject());
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    await act(async () => {
+      await result.current.chooseGarment('threadform-essential-tee');
+    });
+
+    act(() => {
+      result.current.setCameraPreset('back');
+    });
+    expect(result.current.project?.camera.presetId).toBe('back');
+    expect(result.current.project?.camera.azimuthDegrees).toBe(180);
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    expect(mocked.saveProjectChanges).toHaveBeenCalledWith(
+      expect.objectContaining({ camera: expect.objectContaining({ presetId: 'back' }) }),
+    );
+  });
+});
+
 describe('useStudioProject — deleteExistingProject', () => {
   it('returns to the start phase when the currently open project is deleted', async () => {
     const created = buildProject('Doomed');
@@ -192,7 +296,7 @@ describe('useStudioProject — deleteExistingProject', () => {
       await vi.runAllTimersAsync();
     });
     await act(async () => {
-      await result.current.chooseGarment('t-shirt');
+      await result.current.chooseGarment('threadform-essential-tee');
     });
 
     await act(async () => {
@@ -213,7 +317,7 @@ describe('useStudioProject — deleteExistingProject', () => {
       await vi.runAllTimersAsync();
     });
     await act(async () => {
-      await result.current.chooseGarment('t-shirt');
+      await result.current.chooseGarment('threadform-essential-tee');
     });
 
     await act(async () => {

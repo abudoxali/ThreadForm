@@ -1,8 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { GarmentCategory, Project } from '@threadform/types';
+import type { CameraPresetId, Project } from '@threadform/types';
 import type { ProjectSummary } from '@threadform/local-storage';
+import { loadManifest, getCameraPreset } from '@threadform/garment-runtime';
+import {
+  setGarmentColor as applyGarmentColor,
+  setCameraPreset as applyCameraPreset,
+} from '@threadform/project-engine';
 import {
   createAndPersistProject,
   deleteProjectById,
@@ -11,7 +16,6 @@ import {
   restoreLastOpenedProject,
   saveProjectChanges,
 } from '@/lib/projectRepository';
-import { GARMENT_CATEGORIES } from '@/components/studio/garmentCategories';
 
 export type StudioPhase = 'initializing' | 'start' | 'editing';
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -28,11 +32,15 @@ export interface UseStudioProjectResult {
   /** A restrained, user-facing message for a recoverable problem (e.g. "couldn't open that project"). Never a raw error/stack trace. */
   notice: string | null;
   dismissNotice: () => void;
-  chooseGarment: (category: GarmentCategory) => Promise<void>;
+  chooseGarment: (garmentId: string) => Promise<void>;
   openExistingProject: (id: string) => Promise<void>;
   deleteExistingProject: (id: string) => Promise<void>;
   startNewProject: () => void;
   renameProject: (name: string) => void;
+  setGarmentColor: (hex: string) => void;
+  setCameraPreset: (presetId: CameraPresetId) => void;
+  /** Bumped on every `setCameraPreset` call, including a re-selection of the already-active preset — lets the 3D canvas treat that as an explicit "reset view" rather than a no-op. */
+  cameraResetToken: number;
 }
 
 function friendlyMessage(error: unknown): string {
@@ -47,6 +55,7 @@ export function useStudioProject(): UseStudioProjectResult {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [notice, setNotice] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [cameraResetToken, setCameraResetToken] = useState(0);
   // Synchronous guard against double-submission (e.g. a fast double-click)
   // that `isBusy` state alone can't provide, since state updates aren't
   // visible to a second event handler invocation in the same tick.
@@ -182,6 +191,10 @@ export function useStudioProject(): UseStudioProjectResult {
       const current = projectRef.current;
       if (!current) return;
       const next = mutator(current);
+      // project-engine mutators (e.g. `setGarmentColor` on an invalid hex)
+      // return the same reference as a no-op — skip the render/save entirely
+      // rather than scheduling a redundant identical write.
+      if (next === current) return;
       setProjectState(next);
       scheduleSave(next);
     },
@@ -189,16 +202,28 @@ export function useStudioProject(): UseStudioProjectResult {
   );
 
   const chooseGarment = useCallback(
-    async (category: GarmentCategory) => {
+    async (garmentId: string) => {
       if (isBusyRef.current) return;
       isBusyRef.current = true;
       setIsBusy(true);
       setNotice(null);
       cancelPendingSave();
       try {
+        // Resolve the manifest first — never create a project pointing at a
+        // garment whose manifest can't actually be loaded.
+        const manifestResult = await loadManifest(garmentId);
+        if (!manifestResult.success) {
+          setNotice(`Couldn't load that garment. ${manifestResult.error}`);
+          return;
+        }
+        const { manifest } = manifestResult;
         const created = await createAndPersistProject(
-          { garmentId: category, garmentVersion: '0.0.0', category },
-          defaultProjectName(category),
+          {
+            garmentId: manifest.garmentId,
+            garmentVersion: manifest.version,
+            category: manifest.category,
+          },
+          { name: `${manifest.name} Project`, garmentColor: { hex: manifest.defaultColor } },
         );
         setProjectState(created);
         setPhase('editing');
@@ -266,7 +291,13 @@ export function useStudioProject(): UseStudioProjectResult {
     setProjectState(null);
     setSaveStatus('idle');
     setPhase('start');
-  }, [flushPendingSave, setProjectState]);
+    // The recents list was last refreshed at create/open time — a rename
+    // since then wouldn't otherwise show up until the next create/open/
+    // delete. (A rename immediately followed by this, before its debounced
+    // write settles, can still race the refresh below — the same
+    // documented ~600ms window as the autosave-on-teardown gap.)
+    void refreshRecentProjects();
+  }, [flushPendingSave, refreshRecentProjects, setProjectState]);
 
   const renameProject = useCallback(
     (name: string) => {
@@ -274,6 +305,25 @@ export function useStudioProject(): UseStudioProjectResult {
         ...current,
         metadata: { ...current.metadata, name, updatedAt: new Date().toISOString() },
       }));
+    },
+    [updateProject],
+  );
+
+  const setGarmentColor = useCallback(
+    (hex: string) => {
+      updateProject((current) => applyGarmentColor(current, hex));
+    },
+    [updateProject],
+  );
+
+  const setCameraPreset = useCallback(
+    (presetId: CameraPresetId) => {
+      const preset = getCameraPreset(presetId);
+      updateProject((current) => applyCameraPreset(current, presetId, preset));
+      // Bumped even when `presetId` matches the already-active preset, so
+      // re-selecting it acts as an explicit "reset view" instead of a no-op
+      // (the 3D canvas otherwise sees a referentially-unchanged preset).
+      setCameraResetToken((token) => token + 1);
     },
     [updateProject],
   );
@@ -293,10 +343,8 @@ export function useStudioProject(): UseStudioProjectResult {
     deleteExistingProject,
     startNewProject,
     renameProject,
+    setGarmentColor,
+    setCameraPreset,
+    cameraResetToken,
   };
-}
-
-function defaultProjectName(category: GarmentCategory): string {
-  const label = GARMENT_CATEGORIES.find((c) => c.id === category)?.label ?? category;
-  return `${label} Project`;
 }

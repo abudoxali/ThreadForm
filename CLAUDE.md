@@ -10,12 +10,20 @@ UI — never copy their code, assets, or layout). Full product context:
 pnpm workspaces + Turborepo.
 
 ```
-apps/web              Next.js app — marketing site (/) and Studio shell (/studio)
+apps/web              Next.js app — marketing site (/) and Studio (/studio)
 packages/types         Strict TS domain contracts (Project, Garment, Material, ...)
 packages/project-engine  Pure functions: create/validate/migrate/mutate a Project
 packages/local-storage   IndexedDB persistence adapter (save/load/list/delete a Project)
+packages/garment-runtime  Garment manifest schema/validation, catalog, camera presets,
+                         legacy-reference resolution — no rendering
+packages/3d-engine       React Three Fiber garment canvas: GLB loading, lighting rig,
+                         camera framing/orbit, color, error boundary
 packages/ui             Design tokens (tokens.css) + presentational React primitives
 packages/config         Shared tsconfig + ESLint flat configs
+assets/garments/        Source-of-truth original garment assets (GLB + manifest.json +
+                         PROVENANCE.md), copied into apps/web/public/garments for serving
+scripts/                Asset generation/verification scripts (e.g. the procedural
+                         garment generator — see PROVENANCE.md for regeneration)
 docs/                  Product, architecture, design, schema, garment, export, privacy specs
 ```
 
@@ -24,12 +32,16 @@ docs/                  Product, architecture, design, schema, garment, export, p
 `useStudioProject` hook (`apps/web/src/hooks`) is the only place that wires
 that repository into React state (debounced autosave, restore-on-mount).
 Components call the hook, never the repository or `local-storage` directly.
+`useResolvedGarment` (`apps/web/src/hooks`) resolves a `Project`'s
+`GarmentReference` against `garment-runtime`'s catalog/manifest and is the
+only place that does so; `StudioShell` renders `3d-engine`'s
+`StudioGarmentCanvas` from the result — never inline Three.js in a component.
 
-Other packages named in `docs/ARCHITECTURE.md` (garment-runtime, 3d-engine,
-2d-engine, material-engine, effects-engine, animation-engine, export-engine,
-entitlements, analytics) are **documented boundaries, not yet implemented**.
-Do not create empty placeholder packages for them — build them when there is
-real logic to put inside.
+Other packages named in `docs/ARCHITECTURE.md` (2d-engine, material-engine,
+effects-engine, animation-engine, export-engine, entitlements, analytics) are
+**documented boundaries, not yet implemented**. Do not create empty
+placeholder packages for them — build them when there is real logic to put
+inside.
 
 ## Commands
 
@@ -66,10 +78,11 @@ Run from the repo root (Turborepo fans out per package):
 ## No fake implementations
 
 Never present a control as functional when it isn't wired to real behavior.
-If a feature doesn't exist yet (e.g. the garment/3D engine in M00), the UI
-must say so honestly (disabled state + explanatory `title`, or descriptive
-placeholder copy) rather than simulate output. No fake social proof, no fake
-metrics, no placeholder data presented as real.
+If a feature doesn't exist yet (e.g. artwork upload/placement, materials
+beyond base color, or export — still ahead as of M02), the UI must say so
+honestly (disabled state + explanatory `title`, or descriptive placeholder
+copy) rather than simulate output. No fake social proof, no fake metrics, no
+placeholder data presented as real.
 
 ## Before editing
 

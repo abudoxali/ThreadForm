@@ -1,0 +1,35 @@
+{
+  "garmentId": "threadform-essential-tee",
+  "slug": "threadform-essential-tee",
+  "version": "1.0.0",
+  "name": "ThreadForm Essential Tee",
+  "category": "t-shirt",
+  "readiness": "development",
+  "model": {
+    "reference": "/garments/threadform-essential-tee/model.glb",
+    "format": "glb",
+    "scale": 1,
+    "orientationDegrees": { "x": 0, "y": 0, "z": 0 },
+    "meshNaming": {
+      "front": "Mesh_Torso",
+      "back": "Mesh_Torso",
+      "leftSleeve": "Mesh_Sleeve_L",
+      "rightSleeve": "Mesh_Sleeve_R"
+    }
+  },
+  "defaultColor": "#f5f5f0",
+  "printZones": [
+    { "id": "front", "label": "Front", "maxWidth": 0.5, "maxHeight": 0.55 },
+    { "id": "back", "label": "Back", "maxWidth": 0.5, "maxHeight": 0.55 }
+  ],
+  "supportedMaterials": ["cotton", "jersey"],
+  "supportedEffects": ["screen-print", "embroidery"],
+  "compatibleAnimations": ["idle", "slow-rotate", "turntable-360"],
+  "cameraPresets": ["front", "back", "three-quarter"],
+  "provenance": {
+    "source": "threadform-original",
+    "createdBy": "ThreadForm",
+    "license": "Original asset. All rights reserved to ThreadForm.",
+    "notes": "Procedurally generated development-grade mesh — see PROVENANCE.md."
+  }
+}

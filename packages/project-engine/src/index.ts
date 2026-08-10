@@ -7,6 +7,7 @@ export {
   reorderArtworkLayer,
   centerArtworkLayer,
 } from './layers';
+export { setGarmentColor, setCameraPreset } from './garment';
 export { validateProject } from './validate';
 export type { ProjectValidationResult } from './validate';
 export { migrateProject, UnknownSchemaVersionError } from './migrate';
