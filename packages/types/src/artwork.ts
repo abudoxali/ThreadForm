@@ -46,4 +46,16 @@ export interface ArtworkLayer {
   lockAspectRatio: boolean;
   /** Lower renders first (behind); higher renders on top. Unique within a print zone. */
   order: number;
+  /**
+   * The `EffectConfiguration.id` in `Project.effects` describing how this
+   * artwork is physically printed — screen-printed ink, embroidered thread,
+   * and so on (`docs/PRODUCT.md`: effects apply to individual artwork
+   * layers). Absent means the plain, untreated print M03 shipped, which is
+   * what every project created before M04 has.
+   *
+   * A stable id rather than an array index: layers are reordered and
+   * removed, and an index-based link would silently repoint at a different
+   * effect the first time either happened.
+   */
+  effectId?: string;
 }

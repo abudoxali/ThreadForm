@@ -9,7 +9,7 @@ Project
 ├── schemaVersion
 ├── metadata          { id, name, createdAt, updatedAt, studioMode }
 ├── garment           GarmentReference { garmentId, garmentVersion, category }
-├── garmentColor       { hex, label? }
+├── garmentColor       { hex, label? }   ← the single source of garment colour
 ├── material          MaterialConfiguration
 ├── artworks[]         ArtworkLayer[]
 ├── printZones[]       PrintZoneState[]
@@ -106,9 +106,32 @@ at validation time: the limits belong to the _garment's_ print zone, which
 therefore brings existing artwork back into range instead of failing the
 whole project's validation.
 
-`material`, `printZones`, `effects`, `animation`, and `background` remain
-unconsumed — the schema models them ahead of the milestones that will read
-them, per this doc's original design intent.
+As of M04, `material` and `effects` are real as well.
+
+**Garment colour has one source.** `MaterialConfiguration` carried a `color`
+of its own through M03 that nothing ever read — the renderer, the colour
+control and a manifest's `defaultColor` all used `Project.garmentColor`. M04
+removed it rather than keeping two fields in sync. No migration was needed:
+zod's default object mode strips unknown keys, so an M03 document validates
+unchanged and simply sheds the duplicate on its next save.
+
+**Effects belong to artwork layers.** `docs/PRODUCT.md` has always described
+effects as applying to individual artwork layers, but nothing connected the
+two. `ArtworkLayer.effectId` now references an `EffectConfiguration.id` in
+`Project.effects`. It is a stable id rather than an array index because
+layers get reordered and removed, and an index would silently repoint at a
+different effect the first time either happened. Each layer owns its own
+configuration, so tuning one print's stitch relief cannot reach through a
+shared record and move another's.
+
+The field is optional, so every project saved before M04 validates unchanged
+and renders as the plain untreated print it always was. A _dangling_
+`effectId` — the effect it names is gone — is not a validation failure
+either: it resolves to "no effect", which is the same plain print.
+
+`printZones`, `animation` and `background` remain unconsumed — the schema
+models them ahead of the milestones that will read them, per this doc's
+original design intent.
 
 ## Non-trivial domain behavior
 
@@ -140,6 +163,27 @@ supplied by the caller — the domain layer never guesses a garment's limits:
   renumbers the source zone's remaining layers.
 - `replaceArtworkSource` — swaps the image, keeping the layer's identity,
   zone and stacking order, and re-fitting placement to the new aspect ratio.
+
+`packages/project-engine/src/material.ts` and `src/effects.ts` (M04) add the
+fabric and print-process mutations. Both take their allow-list as an
+argument rather than looking one up: which fabrics a garment offers is a
+manifest fact and which are implemented is a renderer fact, and this package
+depends on neither — the same reason `setCameraPreset` is handed a resolved
+preset instead of a preset id.
+
+- `setGarmentMaterial` — refuses a fabric outside the allow-list, and resets
+  `propertyOverrides`, which were authored against a different fabric's
+  defaults.
+- `reconcileGarmentMaterial` — brings a stored fabric back into range when a
+  garment stops offering it. Returns the project unchanged when nothing
+  needs correcting, so merely opening a valid project never marks it dirty.
+- `applyArtworkEffect` / `clearArtworkEffect` — link and unlink, garbage
+  collecting the configuration when the last layer stops referencing it.
+  Re-selecting the effect a layer already has is a no-op, so the control
+  cannot reset an intensity the user tuned.
+- `setArtworkEffectIntensity` / `setArtworkEffectParameter` — clamped, and
+  no-ops when the value would not change, so a slider dragged against its
+  limit does not churn autosave.
 
 ## Future migration example
 

@@ -1,403 +1,384 @@
 # ThreadForm — Status
 
 **Project:** ThreadForm — browser-based 2D/3D apparel design & mockup studio
-**Current milestone:** M03 — Artwork Upload & Print-Zone Placement
+**Current milestone:** M04 — Material & Print-Effect Rendering
 **Milestone state:** PASS
-**Overall project completion:** ~34% (foundation, local persistence, a real 3D garment, and a real artwork import/placement/projection pipeline now exist; no materials beyond base colour, no effects, no animation, no export, no auth/billing/cloud/admin/AI — those remain the bulk of the product)
-**M03 completion:** ~95%
+**Overall project completion:** ~43% (foundation, local persistence, a real 3D garment, real artwork import/placement/projection, and real fabric + print-process rendering now exist; no animation, no export, no auth/billing/cloud/admin/AI — those remain the bulk of the product)
+**M04 completion:** ~95%
 
 ## What a user can actually do now
 
-Choose a garment → open the Artwork tool → pick a print zone (Front or Back;
-selecting one turns the garment to face it) → import a PNG, JPEG, WebP or SVG
-from their device → see it printed on the real 3D garment → resize, rotate,
-move, and fade it → switch zones and place different artwork on the back →
-recolour the shirt without tinting the ink → close the tab, come back, and
-find every placement exactly as they left it. Artwork can be replaced or
-removed, and a file that isn't really an image is refused with a specific
-reason rather than silently doing nothing.
+Open a project → choose between Cotton and Jersey and watch the garment
+surface change → import artwork → apply Screen print or Embroidery to a
+specific layer → see a genuinely different physical treatment on the real 3D
+garment → adjust its strength, and an embroidery's stitch angle → keep the
+garment colour and every M03 placement → autosave, reload, and get the same
+result → switch projects without anything leaking between them → do all of it
+on a phone.
 
-Nothing in that flow is mocked. The E2E suite proves it by screenshotting the
-actual WebGL canvas and counting pixels of the artwork's own hue.
+Nothing in that flow is mocked. The E2E suite proves it by measuring the
+actual WebGL output: a knit's contrast runs vertically where a weave's does
+not, and embroidered thread has far more local relief than screen-printed
+ink.
 
 ## Completed work
 
-**`packages/artwork-engine` (new)** — the artwork trust boundary, with no
-React, no storage and no rendering in it. `sniffArtworkFileKind` identifies a
-file from its actual bytes (PNG/JPEG/WebP magic numbers, a structural check
-for SVG) and never from `File.type` or the filename. `readImageHeaderSize`
-parses PNG IHDR, JPEG SOF and all three WebP container variants so the size
-limits (12 MB file, 8192 px per axis, 40 megapixels total) can be enforced
-_before_ a decode buffer is allocated — a decompression bomb is a few
-kilobytes of valid PNG declaring a 30000×30000 canvas, and by the time an
-`<img>` reports `naturalWidth` the gigabytes already exist. `sanitizeSvg`
-parses with `DOMParser` and re-serializes only what survives, removing
-`<script>`, `<foreignObject>`, `<iframe>`, attribute-retargeting animation
-elements, every `on*` handler, every non-fragment `href`/`xlink:href`,
-`@import` and external `url()` in CSS, and any doctype or processing
-instruction outside the root. Parsing rather than pattern-matching is
-deliberate: it defeats entity-encoding and attribute-quoting bypasses. 48
-tests.
+**`packages/material-engine` (new)** — fabric presets and resolution, with no
+React, no Three.js and no GPU. `resolveMaterial` takes a
+`MaterialConfiguration` plus the garment's own `supportedMaterials` and
+returns clamped, renderer-ready surface parameters. Three.js is deliberately
+not the source of truth for what a fabric _is_: a preset is plain data, so a
+fabric can be authored, diffed and unit-tested without a WebGL context, and
+adding one later is a row in a table rather than another conditional in a
+component. 21 tests.
 
-**Real 3D artwork projection (`packages/3d-engine`)** — `ArtworkZoneOverlay`
-renders each print zone as a second mesh reusing the garment mesh's own
-geometry, with a transparent, UV-mapped canvas texture offset onto that
-zone's `uvRect`. Because it _is_ the garment's surface, the print curves with
-the body, takes the same lighting, is occluded correctly when rotated away,
-and costs nothing per frame. `polygonOffset` keeps the coincident surfaces
-from z-fighting; `depthWrite: false` stops the transparent majority punching
-a hole in the depth buffer. Screen-space DOM overlays and per-frame decal
-regeneration were both rejected for exactly those reasons.
+**`packages/effects-engine` (new)** — print-process presets and resolution,
+same constraints. `resolveEffect` clamps intensity and derives roughness and
+relief from it; `parameters` is filtered through a strict per-kind allow-list
+before anything reaches the renderer. 21 tests.
 
-**Print zones became real garment data** — `PrintZoneDefinition` gained
-`uvRect` (where the zone lives in the model's UV layout) and `aspectRatio`
-(the zone's real width ÷ height, which is what keeps a square logo square
-given that UV space is not physically uniform). Both are zod-validated at the
-manifest boundary, including a refinement that a `uvRect` must fit inside the
-0–1 square. `printZoneMeshName` resolves a zone to its surface and returns
-`undefined` — "render nothing" — for a zone the schema cannot yet name,
-rather than guessing.
+**Cotton** — a plain weave. Warp and weft alternate over and under, with the
+over/under weight a continuous cosine rather than a parity test, so the
+surface has no discontinuity at a thread boundary. Matte (roughness 0.86),
+low relief, dense: light scatters rather than reflects.
 
-**Artwork placement in `project-engine`** (`src/artwork.ts`, pure, no React) —
-`clampArtworkTransform` is the single clamp every placement change passes
-through: scale bounded to the zone's allowance, rotation normalised to
-`(-180, 180]`, and the artwork's _rotated_ bounding box held inside the zone
-(a 45° square needs ~1.41× the room an unrotated one does). Plus
-`setArtworkTransform`, `moveArtworkLayerToZone`, `replaceArtworkSource`,
-`setArtworkOpacity`, `setArtworkVisibility`, `artworkHeightFraction` /
-`fitArtworkScale`. No component hand-edits an `ArtworkLayer`.
+**Jersey** — a knit. Columns of interlocking loops, so its dominant read is
+_columnar_ — visible vertical wales where cotton has an even grid. Smoother
+faced (roughness 0.71) and more structurally pronounced. The difference is
+structural, not a roughness tweak, which is what the E2E gradient-direction
+measurement pins down.
 
-**Artwork persistence (`packages/local-storage`)** — IndexedDB v2 adds an
-`artworks` object store, upgraded stepwise and additively so an existing v1
-database keeps its projects. A `Project` references artwork by `blobId`
-alone, so a debounced autosave stays cheap regardless of image size. Bytes
-are stored as an `ArrayBuffer` plus MIME type rather than as a `Blob` — both
-are valid IndexedDB values, but `ArrayBuffer` is a plain structured-cloneable
-value that survives every storage and test environment unchanged.
+**Screen print** — flat ink bonded to the cloth. It has no structure of its
+own, so it borrows the _garment's_ weave: the same artwork genuinely looks
+different screen-printed on cotton than on jersey. More ink (higher
+intensity) means a thicker, smoother, glossier film that fills the weave in,
+so its relief falls as intensity rises.
 
-**Object-URL lifecycle** — every decode carries its own `release()`, and
-`apps/web/src/hooks/useArtworkAssets.ts` is the single owner of when it is
-called. It reconciles the blob ids a project references against those it
-holds, releasing anything unreferenced. Deleting a layer, replacing artwork,
-switching projects and unmounting the Studio therefore all clean up through
-one path instead of each remembering its own; failure paths release before
-returning. Assets are keyed by blob id, so a duplicated layer costs no extra
-decode.
+**Embroidery** — raised satin stitching with its own thread surface, running
+at a configurable angle, markedly shinier than ink (roughness 0.62 → 0.34).
+Relief climbs with intensity — the opposite direction to screen print,
+because it is a different process. Clipped exactly to the artwork's alpha,
+for free: the overlay material is transparent and the artwork texture's alpha
+is zero outside the print, so those texels are never shaded at all.
 
-**Studio UI** — the Artwork tool rejoined the tool rail (it was removed
-earlier precisely because it had nothing real behind it). The panel carries a
-zone selector with per-zone artwork counts, a layer list, an import button, a
-placement section (size / rotation / horizontal / vertical / opacity sliders
-with live numeric readouts, plus Center), and Replace / Remove. Empty,
-loading, success and error states are all real. Deleting a project now also
-deletes the artwork blobs only it referenced, so removing a project can't
-strand megabytes in the user's quota.
+**Procedural surfaces, no assets** — ThreadForm ships no fabric photographs
+or scans. Every surface is generated from `surfaceHeightField.ts`: a
+plain weave, a knit and a satin stitch, each a seamlessly-tiling height field
+converted to a tangent-space normal map. Height first, normals second,
+because a height field is something you can reason about and unit-test. No
+`Math.random` anywhere, so the same parameters always produce the same
+surface — which is what makes the renderer's cache safe to key on them.
+
+**Effect ownership** — `ArtworkLayer.effectId` now references an
+`EffectConfiguration.id` in `Project.effects`, which is what
+`docs/PRODUCT.md` always described ("apply print/fabric effects to individual
+artwork layers") and nothing had connected. A stable id, not an array index:
+layers get reordered and removed. Each layer owns its own configuration, so
+tuning one print's stitch relief cannot reach through a shared record and
+move another's.
+
+**Garment colour has one source again** — `MaterialConfiguration` carried a
+`color` through M03 that nothing ever read; the renderer, the colour control
+and a manifest's `defaultColor` all used `Project.garmentColor`. It was
+removed rather than kept in sync.
+
+## Effect ownership / association model
+
+|             |                                                                                                                                           |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner       | `Project.effects: EffectConfiguration[]`                                                                                                  |
+| Reference   | `ArtworkLayer.effectId?: string` → `EffectConfiguration.id`                                                                               |
+| Cardinality | One configuration per layer; never shared                                                                                                 |
+| Absent      | No effect — the plain untreated print M03 shipped                                                                                         |
+| Dangling id | Resolves to no effect; not a validation failure                                                                                           |
+| Lifecycle   | Unlinking, removing a layer, or changing effect garbage-collects the orphaned configuration; duplicating a layer clones its configuration |
+
+## Persistence & backward compatibility
+
+Material selection, effect kind, intensity and parameters all survive
+autosave, reload, project switching and browser reopen, through the existing
+IndexedDB v2 store. **No schema version bump and no migration** — neither
+change needed one, and manufacturing one would have been dishonest:
+
+- Removing `MaterialConfiguration.color`: zod's default object mode strips
+  unknown keys, so an M03 document validates unchanged and simply sheds the
+  duplicate on its next save.
+- Adding `ArtworkLayer.effectId`: optional, so every pre-M04 project
+  validates unchanged and renders as the plain print it always was.
+
+Six tests in `validate.test.ts` cover this directly against an M03-shaped
+document, including that its garment colour and artwork survive intact.
+M01's legacy-placeholder E2E flow still passes untouched.
+
+## Supported capability enforcement
+
+The Essential Tee declares `["cotton", "jersey"]` and
+`["screen-print", "embroidery"]`. `MaterialId` has nine members and
+`EffectKind` sixteen; none of the rest are offered, because enforcement
+happens in three places rather than one:
+
+1. `availableMaterials` / `availableEffects` intersect the manifest's list
+   with what this build actually implements, so the UI can only ever offer
+   something real.
+2. `project-engine`'s mutators refuse anything outside the allow-list they
+   are handed.
+3. The resolvers substitute rather than render — an unsupported fabric
+   resolves to one the garment does list, flagged `substituted: true`; an
+   unimplemented effect resolves to `null` and renders as the plain print.
+
+Layers 2 and 3 exist because hiding an option in the UI does nothing about a
+persisted project that already names a fabric the garment never offered.
+E2E Flow D seeds exactly that document (material `denim`, effect `foil`,
+`roughness: 900`, a hostile `parameters` key) straight into IndexedDB and
+verifies it opens, renders, and substitutes without a console error.
 
 ## Architecture changes
 
-- **One new package**, `@threadform/artwork-engine`, added to
-  `docs/ARCHITECTURE.md`'s package table and to the dependency diagram. It
-  depends only on `@threadform/types`.
-- **One new app-level hook**, `useArtworkAssets`, now named in
-  `ARCHITECTURE.md` alongside `useResolvedGarment` as the only place a stored
-  `blobId` becomes a decoded image.
-- `docs/ARCHITECTURE.md` gained an "Artwork import, placement & projection"
-  section describing the four boundaries artwork crosses and why the
-  projection is a UV-mapped overlay rather than a screen-space one.
-- `docs/GARMENT_SPEC.md` gained a "UV layout convention" section — the seam
-  must fall outside every print zone, and `v` must be linear in height —
-  because `uvRect` is meaningless without one.
-- Dependency direction is unchanged and still one-way. `artwork-engine` sits
-  at the domain-engine layer and imports nothing above it.
-
-## Garment change (minimum justified)
-
-M02 documented "front and back print zones both map to `Mesh_Torso`" as a
-limitation blocking independent front/back artwork. It did **not** need a
-mesh split. The fix was the UV layout:
-
-- The torso lathe now starts its revolution at `-π/2`, putting the UV seam on
-  the garment's left side — away from every print zone — and the front
-  centreline at exactly `u = 0.25`, the back at `u = 0.75`. With the default
-  `phiStart = 0` the seam ran down the middle of the chest, so any front
-  print would have been torn in half across the texture wrap.
-- Vertical UVs are re-derived from each vertex's own Y. `LatheGeometry`
-  derives `v` from a profile point's _index_, which compresses
-  densely-sampled regions; making `v` linear in height is what lets a zone
-  rectangle mean a fixed distance up the garment.
-- `manifest.json` declares the two zones as disjoint rectangles in that space
-  (a ~32 cm printable panel each) and is bumped to `1.1.0`.
-
-The silhouette itself is untouched: 4 meshes, 800 triangles, 27.8 KB.
-`scripts/verify-essential-tee.mjs` now asserts the built GLB's UV anchors
-against the manifest and fails if a zone points at the wrong part of the
-texture or two zones overlap — a defect a schema check cannot see and a user
-certainly can. `PROVENANCE.md` records the layout and marks both M02
-limitations (the shared-mesh zones and the shoulder seam gap) as resolved.
-
-## Artwork formats and security behaviour
-
-| Concern           | Behaviour                                                                                                                                      |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Accepted formats  | PNG, JPEG, WebP, SVG — decided by file signature, never MIME type or extension                                                                 |
-| Size ceiling      | 12 MB per file, rejected before the bytes are read                                                                                             |
-| Dimension ceiling | 8192 px per axis and 40 megapixels total, read from the header **before** any decode                                                           |
-| SVG               | Parsed and rebuilt; scripts, event handlers, embedded HTML, external references and CSS imports removed. Sanitized bytes are what get stored   |
-| Rendering context | Drawn via `<img>` into a canvas and uploaded as a WebGL texture. Never in the DOM, never `dangerouslySetInnerHTML`, never a same-origin iframe |
-| Persisted bytes   | Re-sniffed and re-sanitized on every read; a blob whose signature contradicts the project is refused, not rendered                             |
-| Network           | Zero requests on the import path. Artwork never leaves the device                                                                              |
-| Failure           | A specific user-facing message beside the control used; nothing written to storage; retrying the same file works                               |
-
-Verified end-to-end in the browser: an SVG carrying both a `<script>` and an
-`onload` handler sets no global, triggers no off-origin request, and still
-renders the drawing content that survived sanitization.
-
-## Persistence behaviour
-
-A reload restores artwork identity (blob id + file kind), print zone,
-position, scale, rotation, opacity, layer name, stacking order, the recorded
-pixel dimensions and byte size, and the existing garment colour / camera /
-project data. Verified in the browser by comparing slider values _and_ the
-magenta pixel count before and after reload (within ±20 %), not merely by
-checking that "some artwork is present".
-
-Stale data is handled honestly: a layer whose blob has been evicted opens the
-project normally, is listed with a visible "File missing" note, and can be
-replaced or removed. A blob whose real signature contradicts the project is
-refused with "Could not load" rather than rendered.
+- **Two new packages**, `@threadform/material-engine` and
+  `@threadform/effects-engine`, added to `docs/ARCHITECTURE.md`'s package
+  table and removed from its "future boundaries" list. Both depend only on
+  `@threadform/types`.
+- `docs/ARCHITECTURE.md` gained a "Material & print-effect rendering"
+  section covering why Three.js is not the source of material truth, why
+  capability enforcement is layered, how procedural surfaces are generated
+  and owned, and why effects group into consecutive runs.
+- `docs/PROJECT_SCHEMA.md` documents the single colour source and the
+  artwork→effect reference model, with the compatibility reasoning.
+- `docs/GARMENT_SPEC.md` records that `supportedMaterials`/`supportedEffects`
+  are now enforced, and that a manifest may list something unimplemented
+  without that becoming a control.
+- `docs/PRIVACY_SECURITY.md` gained an "Effect parameters" section.
+- Dependency direction unchanged and still one-way.
 
 ## Testing
 
 Exact commands, run from a clean state after every fix below:
 
 - `pnpm format:check` — **passed.**
-- `pnpm typecheck` — **9/9 packages passed.**
-- `pnpm lint` — **9/9 packages passed, 0 errors, 0 warnings.**
-- `pnpm test` — **223/223 passed**: `artwork-engine` 48, `project-engine` 60,
-  `local-storage` 23, `garment-runtime` 22, `3d-engine` 17, `web` 50, `ui` 3.
-  (M02 total was 92; **131 tests are new this milestone.**)
+- `pnpm typecheck` — **10/10 packages passed.**
+- `pnpm lint` — **10/10 packages passed, 0 errors, 0 warnings.**
+- `pnpm test` — **356/356 passed**: `project-engine` 96, `web` 65, `3d-engine`
+  57, `artwork-engine` 48, `local-storage` 23, `garment-runtime` 22,
+  `material-engine` 21, `effects-engine` 21, `ui` 3.
+  (M03 total was 223; **133 tests are new this milestone.**)
 - `pnpm build` — **succeeded.**
-- `pnpm --filter @threadform/web test:e2e` — **9/9 passed**, run repeatedly
-  across this milestone's fixes with no flakiness in the final build.
+- `pnpm --filter @threadform/web test:e2e` — **13/13 passed.**
+- `node scripts/verify-essential-tee.mjs` — **passed** (unchanged asset;
+  re-run to confirm M04 touched no garment geometry).
 
-Security-sensitive coverage is deliberately heavy, since this is the first
-milestone that accepts a user file: 18 SVG-sanitizer regression tests
-asserting on what is _absent_ from the rebuilt document, 7 signature-sniffing
-tests (including a text file named `logo.png` served as `image/png`, and HTML
-that also opens with `<`), 8 header-parsing tests (including an absurd
-declared size reported truthfully so the limits can reject it), and 15
-validation tests.
+New coverage by area: material-engine 21 (cotton/jersey resolution, override
+merging, clamps, non-finite input, unsupported material, determinism, no
+input mutation), effects-engine 21 (both processes, intensity and parameter
+clamping, the allow-list dropping `__proto__`/unknown keys, determinism, no
+mutation), project-engine 30 (material mutations + enforcement, effect
+link/unlink/GC, per-layer independence, old-project compatibility),
+3d-engine 40 (height-field structure/tiling/determinism, normal encoding,
+surface caching, effect-run ordering), web 15 (Studio material and effect
+flows through IndexedDB).
 
 ## E2E flows
 
-Nine tests across `apps/web/e2e/smoke.spec.ts` (5, carried over from M02) and
-`apps/web/e2e/artwork.spec.ts` (4, new). Every artwork assertion screenshots
-the real WebGL canvas and counts pixels of the fixture's hue — a test that
-only checked component state would pass just as happily with the 3D
-projection completely broken, which is the failure this milestone most needed
-to rule out. Matchers test channel _relationships_ rather than exact values,
-so lighting and tone mapping don't make a correct render look like a failure.
-`apps/web/e2e/pixels.ts` is a dependency-free PNG reader written for this
-(Playwright screenshots are the only honest way to read an R3F canvas, since
-`preserveDrawingBuffer` is correctly off).
+Thirteen tests: nine carried over from M01–M03, four new in
+`apps/web/e2e/materialEffects.spec.ts`. Every M04 assertion measures the real
+WebGL canvas via `measureSurface` — local contrast and its direction —
+rather than comparing against a stored image. A snapshot would break on any
+lighting change while proving nothing about whether two materials differ.
 
-1. **Artwork lifecycle** (8 steps) — the fixture hue is confirmed absent
-   first, then: import → printed on the garment; size slider down → measurably
-   fewer ink pixels, back up → more; rotate and move; switch to Back → the
-   front print is gone (garment turned) and the back zone is empty; import a
-   second artwork → cyan present, magenta absent (no bleed between zones);
-   return to Front → magenta back, cyan gone; wait for "Saved", reload →
-   sliders and ink coverage both match within tolerance, and the back zone's
-   artwork returned too; recolour the shirt black → the ink is untinted;
-   replace with the SVG fixture → green present, magenta gone; remove → gone,
-   and still gone after another reload; orbit the camera → the print stays
-   attached to the garment.
-2. **Rejecting non-images** — a text file named `not-an-image.png` is refused
-   with "supported image", nothing is added, and a valid file immediately
-   afterwards works.
-3. **SVG sanitization** — the hostile fixture sets no global, makes no
-   off-origin request, and still renders its surviving drawing content.
-4. **Mobile at 390×844** — import and placement work, the size slider is
-   ≥36 px tall, no horizontal overflow.
-
-Console errors are asserted empty in every flow.
+- **Flow A — garment material.** Cotton renders → switch to Jersey → the
+  render measurably changes, _and_ jersey's contrast is far more horizontal
+  than cotton's (a knit's wales run vertically) → garment colour still works
+  → wait for Saved → reload → jersey is still selected _and_ still measures
+  as a knit.
+- **Flow B — screen print.** Real artwork imported → screen print applied →
+  the ink shows the weave where an untreated print is perfectly smooth →
+  artwork transformed → garment orbited → the print stays attached.
+- **Flow C — embroidery.** Applied on top of a controlled screen-print
+  baseline at the same camera and transform → the print has >1.6× the local
+  relief → alpha clipping verified (bare fabric beside the print is
+  unchanged) → stitch relief slider changes the render → reload restores a
+  visually equivalent treatment.
+- **Flow D — capability enforcement.** No unsupported fabric or process is
+  offered; a seeded hostile project opens, renders and substitutes safely.
+- **Flow E — mobile at 390×844.** Material and effect controls reachable,
+  ≥36px touch targets, artwork stays visible while adjusting, no horizontal
+  overflow.
 
 ## Visual QA actually performed
 
-Rendered via Playwright + Chromium against the **production build** (Claude-in-Chrome
-MCP unavailable in this environment, as in M00–M02) at 1440×900, 1280×720,
-1024×768, 768×1024, 390×844 and 360×800 — seven states at each: artwork empty
-state, front artwork, transformed artwork (scaled, rotated −24°, repositioned),
-back artwork (SVG), dark garment + artwork, import error, and touch-target
-measurement. 42 screenshots, inspected individually. **Four real defects
-found and fixed:**
+Rendered via Playwright + Chromium against the **production build**
+(Claude-in-Chrome MCP unavailable in this environment, as in M00–M03) at
+1440×900, 1280×720, 768×1024, 390×844 and 360×800, across twelve states:
+cotton/jersey × light/dark garment, artwork with screen print, with
+embroidery, embroidery at close viewing distance, transformed artwork with an
+effect, the back zone with its own effect, two layers with different effects
+in one zone, and the mobile material and effect controls. Screenshots
+inspected individually. **Four real defects found and fixed:**
 
-- **Prints were too small to be believable.** The manifest capped artwork at
-  50 % of the print zone, making the largest possible front print ~16 cm on a
-  66 cm garment. Fixed by letting artwork fill the declared print area
-  (`maxWidth`/`maxHeight` → 1) and sizing a newly imported artwork to 70 % of
-  it — confident, and with room to move in both directions.
-- **The garment shrank into a corner on mobile.** Opening the Inspector sheet
-  shortens the canvas, and M02's resize handling deliberately left the camera
-  alone to preserve the user's orbit — which also left the distance fitted to
-  a taller canvas. Fixed by re-fitting the camera's _distance_ on resize
-  while preserving the orbit angle: how far away the garment must be to fill
-  the canvas is a property of the canvas, not of the user's viewpoint.
-- **Import errors were invisible on a phone.** The rejection message landed
-  below the fold of the short Inspector sheet, so picking a bad file appeared
-  to do nothing. (Screen-reader users already had it via `role="alert"`.)
-  Fixed by scrolling the alert into view.
-- **Panel polish:** the empty state repeated the accepted-format list twice at
-  narrow widths, and "Add artwork" used the accent colour even once a zone had
-  artwork. Fixed — accent is now reserved for the action the panel is asking
-  for.
-
-Re-ran the full sweep after the fixes: no automated issues, and the
-before/after screenshots confirm each fix.
+- **Both fabrics looked like knitwear, not apparel.** The first preset values
+  put a wale or thread at roughly 8 mm with heavy relief — the garment read
+  as corduroy and mesh, exactly the "carpet" failure the brief warns about.
+  Fixed by roughly doubling the tile counts (to ~3–4 mm structure) and
+  cutting relief by about half. Both now read as credible cloth while
+  remaining obviously different from each other.
+- **Embroidery relief did not render at all.** Attaching a normal map to a
+  material that did not previously have one changes the shader's defines, so
+  the program must be rebuilt; letting React set the prop left the old,
+  map-less program in place and the stitching simply never appeared. Fixed
+  by assigning the map imperatively with an explicit `needsUpdate`, the same
+  way the garment material already did.
+- **The mobile fabric picker was unreachable.** The Inspector sheet opened
+  for every tool _except_ garment — which was harmless in M03 and became a
+  dead end in M04, when the fabric picker joined the garment tool. Fixed so
+  any tool opens the sheet.
+- **The effect controls sat below the mobile fold.** The artwork panel grew
+  by a selector, an intensity control and a parameter. The sheet was grown
+  from `max-h-72` to `max-h-80`; see Deliberate scope decisions for what was
+  _not_ done.
 
 ## Accessibility checks actually performed
 
-A real keyboard-driven pass against the production build, driving Tab / Enter
-/ arrow keys and asserting **actual DOM and project-state changes**, not
-markup inspection. 17/17 checks passed:
+A real keyboard-driven pass against the production build, asserting actual
+DOM and project-state changes rather than inspecting markup. **18/18 passed:**
 
-- Tab reaches the Artwork tool; Enter opens the panel.
-- Tab reaches the print-zone buttons; Enter flips `aria-pressed` and the
-  camera preset actually changes in the persisted project.
-- The file input is genuinely in the tab order (visually hidden, not
-  `display: none`) and shows a visible accent focus ring on its button when
-  reached by Tab. (Confirmed that a programmatic `.focus()` correctly does
-  _not_ trigger `:focus-visible` — the initial probe reporting otherwise was
-  the probe's bug, not the app's.)
-- Every placement slider is focusable, responds to arrow keys, and carries an
+- Fabric and effect options expose `aria-pressed`, and both groups are
+  labelled for assistive tech (`role="group"` + `aria-labelledby`, with a
+  per-instance id since the Inspector renders twice).
+- Tab reaches the fabric and effect buttons; both show a visible focus ring;
+  Enter selects, flips `aria-pressed`, and — verified through IndexedDB —
+  actually persists.
+- Every effect slider is focusable, responds to arrow keys, and carries an
   `aria-valuetext` matching its visible readout.
-- Enter on "Center" recenters the artwork; Enter on "Remove" deletes the
-  layer; both show a visible focus ring.
-- The active print zone is marked with a check icon, not colour alone; the
-  same is true of the selected layer and of the error state (icon + text).
+- Active fabric and active effect are both marked with a check icon, not
+  colour alone.
+- The intensity control is labelled for the selected process ("Ink weight"
+  vs "Stitch relief"), and an effect's parameter appears only when that
+  effect declares one — no inert sliders.
 
 **Not tested:** screen reader (not run — not claimed).
 
 ## Performance impact
 
-Measured against the production build, before and after:
+Measured against the production build:
 
-- `/studio` First Load JS: **139 kB**, up from **131 kB** in M02 (+8 kB for
-  the artwork panel and engine). three.js/drei/GLTF remain behind the
-  `next/dynamic({ssr:false})` boundary — 5 chunks are still fetched only once
-  a garment is chosen, and never on the picker/recents start screen.
-- **0 `requestAnimationFrame` calls over 3 seconds while idle with artwork on
-  the garment.** The demand frame loop is intact; the artwork projection is a
-  static texture, not per-frame work.
-- A placement change settles immediately (one canvas repaint plus one texture
-  upload; each zone owns one canvas and one texture for its lifetime rather
-  than allocating per change).
-- JS heap after importing a 256×256 PNG: ~11 MB.
-- Project payloads did **not** grow: artwork bytes live in a separate
-  IndexedDB store and a `Project` carries only a `blobId`, so autosave cost is
-  independent of image size. Asserted by a test that the project document
-  never contains the artwork bytes.
+|                                            | M03    | M04                |
+| ------------------------------------------ | ------ | ------------------ |
+| `/studio` First Load JS                    | 139 kB | **142 kB** (+3 kB) |
+| Chunks deferred until a garment is chosen  | 5      | **5** (unchanged)  |
+| `requestAnimationFrame` calls over 3s idle | 0      | **0**              |
+| JS heap after first render                 | ~11 MB | **~11 MB**         |
+
+Plus, new this milestone: 12 consecutive fabric switches, 12 consecutive
+effect switches and 3 project switches all left the heap flat at 11 MB — no
+GPU or JS resource growth from repeated switching. Surface _pixels_ are
+generated once and cached module-wide (bounded to 12 entries, ~256 KB each);
+each material gets its own cheap `DataTexture` wrapper that it owns and
+disposes, so nothing leaks between materials, projects or instances.
+Textures are rebuilt only when a value the GPU cares about changes — keyed
+on the resolved surface's values, not on object identity.
 
 ## Defects discovered and fixed
 
 Beyond the four visual-QA defects above:
 
-- **`vector2`/`vector3` schemas accepted `Infinity`.** `z.number()` rejects
-  `NaN` but not infinities, and an infinite scale or position reaches the
-  renderer as a NaN transform matrix that silently blanks the whole canvas.
-  Fixed with `.finite()`; `clampArtworkTransform` also replaces non-finite
-  values defensively, with tests for both.
-- **A double-decode race could leak an object URL.** A freshly imported
-  artwork can be adopted (already decoded) while a storage read of the same
-  blob is still in flight. Fixed by having the later read release its
-  duplicate rather than overwrite the adopted one.
-- **`GarmentModel` would have re-uploaded every zone texture on every
-  render.** Grouping layers by zone inline created a new array identity each
-  time; memoised, so a full-resolution canvas repaint happens only when the
-  artwork actually changes.
-- **`Blob` did not survive IndexedDB in every environment.** Switched the
-  artwork store to `ArrayBuffer` + MIME type — a plain structured-cloneable
-  value, and the more portable of the two IndexedDB options anyway.
+- **The plain weave was discontinuous at every thread boundary.** Choosing
+  which thread was on top with a parity test of the cell index is a step
+  function, so the surface jumped — not only at the tile's edge, where it
+  broke tiling outright, but throughout, which bakes into a normal map that
+  reads as a hard grid ruled across the shirt. Found by a tiling test,
+  diagnosed rather than threshold-adjusted, and fixed by modelling the
+  over/under weight as a continuous cosine, which is also the physically
+  correct model. Two regression tests.
+- **A NaN detail weight produced a black garment.** `Math.max(0, NaN)` is
+  `NaN`, so clamping alone did not make a weight safe; it propagated into
+  every height, then every normal. Fixed with a finite check.
+- **`vector2`/`vector3`/effect parameters accepted `Infinity`.** Extended
+  M03's `.finite()` treatment to the material overrides and effect
+  parameters.
+
+## Unresolved defects
+
+None known that are in M04's scope. Two observed characteristics, documented
+rather than "fixed" because they are correct behaviour:
+
+- **The fabric difference is subtle on a very dark garment.** Black matte
+  cotton absorbs almost everything, so its structure barely reads; black
+  jersey shows a little more sheen. That is how those fabrics actually
+  behave, and the difference is still measurable — but a user who picks black
+  first will see less than one who picks natural.
+- **The fabric difference is subtle at 390px.** The garment is small enough
+  there that the weave approaches sub-pixel, so most of what changes is
+  shading. Flow A measures material fidelity at desktop resolution for this
+  reason, and Flow E's threshold is set accordingly with that stated in the
+  test.
 
 ## Deliberate scope decisions
 
-- **Multiple artwork layers per zone are supported and work** — the domain
-  model always allowed them, the panel lists them all with per-layer select /
-  replace / remove, and both render on the garment with correct stacking
-  (verified visually). What is _not_ exposed is drag-to-reorder: the
-  `reorderArtworkLayer` domain function exists and is tested, but no control
-  drives it yet. This follows the brief's "don't overbuild a Photoshop-style
-  layer manager"; adding the control later needs no architectural change.
-- **Placement is slider-driven, not drag-on-canvas.** Sliders are keyboard
-  accessible for free, work identically on touch and mouse, and gave the
-  milestone a correct, clamped, testable placement model. Direct manipulation
-  on the 3D surface is a genuinely separate piece of work (ray-casting
-  screen-space drags back into zone-normalized UV space).
+- **`MaterialProperties` overrides are implemented but not exposed.** All
+  five map into the render pipeline and are clamped, and a persisted project
+  carrying them is honoured — but no slider drives them. `roughness` and
+  `normalIntensity` are what the fabric preset _is_, and exposing them would
+  be a knob farm rather than a fabric choice. The brief's "don't create
+  meaningless knobs" applies.
+- **One intensity control per effect, plus one parameter for embroidery.**
+  Both visibly change the render, both are labelled for their process, and
+  screen print shows no stitch-angle slider because it has no stitch
+  direction. Nothing inert was added.
+- **The mobile Inspector sheet still scrolls.** It was grown once; growing it
+  further would eat the garment preview, which is the product. A scrolling
+  bottom sheet is a standard pattern and the section headings make the
+  remaining content discoverable.
+- **Effects group into consecutive runs**, not buckets. Bucketing by effect
+  would be one draw call cheaper in the interleaved case and would silently
+  reorder the stack; correctness wins.
 
-## Housekeeping
+## Carried backlog (unchanged, not folded into M04)
 
-Three uncommitted profiling/QA scratch scripts left in `apps/web/` by an
-earlier session (`profile.mjs`, `profile-bundle.mjs`, `visual-qa-full.mjs`)
-were moved out of the repository into scratch storage. They were the only
-source of `pnpm lint` warnings, hardcoded an absent temp path, and were never
-committed. No committed work was removed.
+- The ~600 ms tab-close autosave data-loss window (M01).
+- Keyboard testing of delete/confirm and "New Project" specifically (M01);
+  screen-reader testing generally (M00–M04).
+- `packages/config` still has no `lint`/`typecheck` scripts of its own.
+- `Project.camera`'s persisted `distance`/`target`/`fieldOfViewDegrees` are
+  still ignored by the renderer.
+- Layer reordering has no UI control (M03).
+- Garment version-mismatch UX (`GARMENT_SPEC.md`'s "surface an explicit
+  older-version state" rule) is still unimplemented.
+- `meshNaming` has no key for a hood or a trouser leg.
+- The Essential Tee remains `readiness: "development"` — a procedurally
+  generated placeholder garment, honestly labelled.
+- No animation, no export, no auth/billing/cloud/admin/AI.
+
+**One backlog item was touched, because M04 depended on it:** Playwright's
+default 30s test timeout was raised to 120s in
+`apps/web/playwright.config.ts`. The artwork and material/effect journeys
+each drive a real WebGL canvas through a dozen-plus screenshot-and-settle
+cycles and take ~25–35s alone; under parallel load they exceeded the default
+while every assertion still passed. Raising the ceiling was the honest fix —
+trimming the measurements to fit would have traded real coverage for a
+number.
 
 ## Git
 
 - **Branch:** `main`
 - **Remote:** `https://github.com/3bud-ZC/ThreadForm.git`
-- **Commit:** `6630b99` — Milestone 03: artwork import, print-zone placement
-  and real 3D projection.
-- **Push:** succeeded (`da05577..6630b99  main -> main`).
-
-## Remaining known issues
-
-**Carried over, deliberately not folded into this milestone** (none of them
-blocked M03):
-
-- The ~600 ms tab-close autosave data-loss window (M01). The E2E suite waits
-  for "Saved" before reloading rather than racing it.
-- Keyboard testing of the delete/confirm and "New Project" flows specifically
-  (M01), and screen-reader testing generally (M00–M03).
-- `packages/config` still has no `lint`/`typecheck` scripts of its own.
-- `Project.camera`'s persisted `distance`/`target`/`fieldOfViewDegrees` are
-  still ignored by the renderer. **Partially touched this milestone:** the
-  camera now re-fits its distance on canvas resize (see Visual QA), which
-  makes the stored `distance` even less meaningful. Whether user zoom should
-  persist at all remains the product question it was in M02.
-- The default framing leaves the garment somewhat small on very tall, narrow
-  canvases — `frameGarment` fits a bounding _sphere_, which is conservative
-  for a wide, flat garment. Unchanged from M02 and judged acceptable; fixing
-  it properly means fitting projected bounding-box extents, which risks the
-  mobile-clipping regression M02 fixed.
-
-**New this milestone, documented rather than fixed:**
-
-- Layer reordering has no UI control (see Deliberate scope decisions).
-- The garment manifest's `version` bumped to `1.1.0`, and there is still no
-  version-mismatch migration path — `resolveGarmentReference` matches on
-  `garmentId`, so existing `1.0.0` projects resolve and render normally, but
-  `GARMENT_SPEC.md`'s "surface an explicit older-version state" rule remains
-  unimplemented. No garment has yet shipped a change that would need it.
-- `meshNaming` has no key for a hood or a trouser leg, so a garment declaring
-  those zones would render nothing there until the schema is extended.
-  `printZoneMeshName` returns `undefined` honestly rather than guessing.
-- No materials beyond base colour, no effects, no animation, no export — all
-  explicitly out of scope for M03.
+- **M04 implementation commit:** _recorded below once it lands._
+- **Current HEAD:** _recorded below._
+- **Push:** _recorded below._
 
 ## Next milestone
 
-**M04 — Material & Print-Effect Rendering.** `MaterialConfiguration` and
-`EffectConfiguration` have been modelled in `packages/types` since M00 and are
-still inert. The manifest's `supportedMaterials` / `supportedEffects`
-allow-lists exist but nothing enforces them, because there is nothing to
-enforce them against. M04 should build `material-engine` and `effects-engine`
-as the documented boundaries describe — resolving those configurations into
-renderer parameters without a GPU context, so presets stay authorable and
-testable — and wire them into the existing `3d-engine` surface. The artwork
-overlay is the natural place for the first print effects (screen-print,
-puff, embroidery) to land, since it already owns a per-zone material.
+**M05 — Export.** Materials and effects make the Studio's output worth
+taking out of the browser, and `docs/EXPORT_SPEC.md` plus
+`ExportPreferences` have been modelled since M00 while `exportPreferences`
+stays inert. The obvious next step is `export-engine` as the documented
+boundary describes — a `Project` plus `ExportPreferences` to a PNG at a
+chosen resolution and aspect ratio, rendered off-screen from the same
+`3d-engine` scene rather than by screenshotting the viewport, with the
+social/commerce target presets the spec already lists. It needs no new
+domain modelling, exercises everything M02–M04 built, and turns the Studio
+from something you look at into something you ship. Animation (`M06`) is
+the larger and riskier piece and reads better after export exists, since a
+video export shares most of its machinery.
 
 ---
 
-_Last updated: 2026-08-22 (M03 — artwork import, print-zone UV layout, placement, real 3D projection, persistence, security boundary, visual + keyboard QA, fixes)._
+_Last updated: 2026-08-22 (M04 — material-engine, effects-engine, cotton/jersey, screen print/embroidery, procedural surfaces, capability enforcement, visual + keyboard QA, fixes)._

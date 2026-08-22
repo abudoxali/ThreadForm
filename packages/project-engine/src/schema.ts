@@ -115,15 +115,28 @@ const MATERIAL_IDS = [
   'performance',
 ] as const satisfies readonly MaterialId[];
 
+/**
+ * Note the absence of a `color`. Projects saved before M04 carry one, and
+ * zod's default object mode strips unknown keys — so an M03 document loads,
+ * validates, and quietly sheds its duplicate colour on the next save. That
+ * is the whole migration: `Project.garmentColor` was always the field the
+ * renderer and the colour control used, and this one was never read.
+ *
+ * Overrides are `.finite()` but otherwise unbounded here on purpose. What
+ * counts as a sane roughness belongs to the *material preset* the override
+ * sits on top of, which this schema cannot see; `@threadform/material-engine`
+ * clamps them at the point of use. Rejecting a whole project because one
+ * override drifted out of range would lose a user's work over a number the
+ * renderer can simply pull back into bounds.
+ */
 const materialConfigurationSchema = z.object({
   materialId: z.enum(MATERIAL_IDS),
-  color: garmentColorSchema,
   propertyOverrides: z.object({
-    roughness: z.number().optional(),
-    normalIntensity: z.number().optional(),
-    fabricDetail: z.number().optional(),
-    wrinkleDetail: z.number().optional(),
-    fiberDetail: z.number().optional(),
+    roughness: z.number().finite().optional(),
+    normalIntensity: z.number().finite().optional(),
+    fabricDetail: z.number().finite().optional(),
+    wrinkleDetail: z.number().finite().optional(),
+    fiberDetail: z.number().finite().optional(),
   }),
 });
 
@@ -172,6 +185,11 @@ const artworkLayerSchema = z.object({
   locked: z.boolean(),
   lockAspectRatio: z.boolean(),
   order: z.number(),
+  // Optional, so every project saved before M04 validates unchanged. A
+  // dangling id (the effect it named is gone) is not a validation failure
+  // either: `findArtworkEffect` resolves it to "no effect", which renders as
+  // the plain print the layer had before.
+  effectId: z.string().min(1).optional(),
 });
 
 /**
@@ -202,11 +220,19 @@ const EFFECT_KINDS = [
   'sublimation',
 ] as const satisfies readonly EffectKind[];
 
+/**
+ * `parameters` stays an open record of finite numbers here, and is
+ * allow-listed per effect kind by `@threadform/effects-engine` before any of
+ * it reaches the renderer. Two layers of defence for the same reason as the
+ * material overrides above: the schema cannot know which keys a kind
+ * understands, and a project should not fail to open because it carries a
+ * parameter this build has since renamed.
+ */
 const effectConfigurationSchema = z.object({
   id: z.string().min(1),
   kind: z.enum(EFFECT_KINDS),
   intensity: z.number().min(0).max(1),
-  parameters: z.record(z.string(), z.number()),
+  parameters: z.record(z.string(), z.number().finite()),
 });
 
 const ANIMATION_PRESET_IDS = [

@@ -43,10 +43,14 @@ export function defaultAnimation(): AnimationConfiguration {
   };
 }
 
+/**
+ * A new project's fabric. Cotton is the plainest implemented material, so
+ * it is the least opinionated starting point. No colour lives here — see
+ * `MaterialConfiguration`; `Project.garmentColor` is the single source.
+ */
 export function defaultMaterial(): MaterialConfiguration {
   return {
     materialId: 'cotton',
-    color: { hex: '#f5f5f0', label: 'Natural' },
     propertyOverrides: {},
   };
 }

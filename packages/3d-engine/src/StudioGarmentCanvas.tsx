@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import type { GarmentManifest, CameraPresetDefinition } from '@threadform/garment-runtime';
+import type { ResolvedMaterial } from '@threadform/material-engine';
 import { GarmentModel } from './GarmentModel';
 import type { ArtworkRenderLayer } from './ArtworkZoneOverlay';
 import { CameraRig } from './CameraRig';
@@ -16,6 +17,8 @@ import type { GarmentBounds } from './frameGarment';
 export interface StudioGarmentCanvasProps {
   manifest: GarmentManifest;
   colorHex: string;
+  /** The garment fabric, already resolved and clamped by `@threadform/material-engine`. */
+  material: ResolvedMaterial;
   /** Decoded, validated artwork to print on the garment. A stable reference matters — see GarmentModel. */
   artworkLayers: ArtworkRenderLayer[];
   cameraPreset: CameraPresetDefinition;
@@ -57,6 +60,7 @@ function LoadingOverlay() {
 export function StudioGarmentCanvas({
   manifest,
   colorHex,
+  material,
   artworkLayers,
   cameraPreset,
   cameraResetToken,
@@ -83,6 +87,7 @@ export function StudioGarmentCanvas({
           <GarmentModel
             manifest={manifest}
             colorHex={colorHex}
+            material={material}
             artworkLayers={artworkLayers}
             onBoundsReady={setBounds}
           />

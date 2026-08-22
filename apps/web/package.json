@@ -16,8 +16,10 @@
   "dependencies": {
     "@threadform/3d-engine": "workspace:*",
     "@threadform/artwork-engine": "workspace:*",
+    "@threadform/effects-engine": "workspace:*",
     "@threadform/garment-runtime": "workspace:*",
     "@threadform/local-storage": "workspace:*",
+    "@threadform/material-engine": "workspace:*",
     "@threadform/project-engine": "workspace:*",
     "@threadform/ui": "workspace:*",
     "next": "^15.1.4",

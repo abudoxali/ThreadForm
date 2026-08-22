@@ -1,7 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CameraPresetId, PrintZoneDefinition, Project } from '@threadform/types';
+import type {
+  CameraPresetId,
+  EffectKind,
+  MaterialId,
+  PrintZoneDefinition,
+  Project,
+} from '@threadform/types';
 import type { ProjectSummary } from '@threadform/local-storage';
 import { loadManifest, getCameraPreset } from '@threadform/garment-runtime';
 import { artworkNameFromFileName } from '@threadform/artwork-engine';
@@ -17,8 +23,14 @@ import {
   setArtworkTransform as applyArtworkTransform,
   setGarmentColor as applyGarmentColor,
   setCameraPreset as applyCameraPreset,
+  setGarmentMaterial as applyGarmentMaterial,
+  applyArtworkEffect as applyEffectToArtwork,
+  clearArtworkEffect as clearEffectFromArtwork,
+  setArtworkEffectIntensity as applyArtworkEffectIntensity,
+  setArtworkEffectParameter as applyArtworkEffectParameter,
 } from '@threadform/project-engine';
 import type { ArtworkTransformPatch } from '@threadform/project-engine';
+import { defaultEffectIntensity, defaultEffectParameters } from '@threadform/effects-engine';
 import {
   createAndPersistProject,
   deleteProjectById,
@@ -85,6 +97,26 @@ export interface UseStudioProjectResult {
   centerArtwork: (layerId: string) => void;
   moveArtworkToZone: (layerId: string, zone: PrintZoneDefinition) => void;
   setArtworkOpacity: (layerId: string, opacity: number) => void;
+  /**
+   * Sets the garment's fabric. `allowedMaterialIds` is the intersection of
+   * the garment manifest's `supportedMaterials` and the materials this build
+   * implements — passed in for the same reason print zones are, so the
+   * allow-list enforced by the domain is always the resolved garment's.
+   */
+  setGarmentMaterial: (materialId: MaterialId, allowedMaterialIds: readonly MaterialId[]) => void;
+  applyArtworkEffect: (
+    layerId: string,
+    kind: EffectKind,
+    allowedKinds: readonly EffectKind[],
+  ) => void;
+  clearArtworkEffect: (layerId: string) => void;
+  setArtworkEffectIntensity: (layerId: string, intensity: number) => void;
+  setArtworkEffectParameter: (
+    layerId: string,
+    key: string,
+    value: number,
+    range: { min: number; max: number },
+  ) => void;
   /** Bumped on every `setCameraPreset` call, including a re-selection of the already-active preset — lets the 3D canvas treat that as an explicit "reset view" rather than a no-op. */
   cameraResetToken: number;
 }
@@ -499,6 +531,49 @@ export function useStudioProject(): UseStudioProjectResult {
     [updateProject],
   );
 
+  const setGarmentMaterial = useCallback(
+    (materialId: MaterialId, allowedMaterialIds: readonly MaterialId[]) => {
+      updateProject((current) => applyGarmentMaterial(current, materialId, allowedMaterialIds));
+    },
+    [updateProject],
+  );
+
+  const applyArtworkEffect = useCallback(
+    (layerId: string, kind: EffectKind, allowedKinds: readonly EffectKind[]) => {
+      // The effect's starting values come from its preset in
+      // `effects-engine`; `project-engine` deliberately doesn't know them,
+      // the same way it doesn't know camera preset angles.
+      updateProject((current) =>
+        applyEffectToArtwork(current, layerId, kind, allowedKinds, {
+          intensity: defaultEffectIntensity(kind),
+          parameters: defaultEffectParameters(kind),
+        }),
+      );
+    },
+    [updateProject],
+  );
+
+  const clearArtworkEffect = useCallback(
+    (layerId: string) => {
+      updateProject((current) => clearEffectFromArtwork(current, layerId));
+    },
+    [updateProject],
+  );
+
+  const setArtworkEffectIntensity = useCallback(
+    (layerId: string, intensity: number) => {
+      updateProject((current) => applyArtworkEffectIntensity(current, layerId, intensity));
+    },
+    [updateProject],
+  );
+
+  const setArtworkEffectParameter = useCallback(
+    (layerId: string, key: string, value: number, range: { min: number; max: number }) => {
+      updateProject((current) => applyArtworkEffectParameter(current, layerId, key, value, range));
+    },
+    [updateProject],
+  );
+
   const dismissNotice = useCallback(() => setNotice(null), []);
 
   return {
@@ -523,6 +598,11 @@ export function useStudioProject(): UseStudioProjectResult {
     centerArtwork,
     moveArtworkToZone,
     setArtworkOpacity,
+    setGarmentMaterial,
+    applyArtworkEffect,
+    clearArtworkEffect,
+    setArtworkEffectIntensity,
+    setArtworkEffectParameter,
     cameraResetToken,
   };
 }

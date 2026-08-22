@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { CAMERA_PRESETS } from '@threadform/garment-runtime';
 import type { CameraPresetId, PrintZoneId } from '@threadform/types';
+import { resolveMaterial } from '@threadform/material-engine';
 import { useStudioProject } from '@/hooks/useStudioProject';
 import { useResolvedGarment } from '@/hooks/useResolvedGarment';
 import { useArtworkAssets } from '@/hooks/useArtworkAssets';
@@ -48,9 +49,11 @@ export function StudioShell() {
   const [canvasFailed, setCanvasFailed] = useState(false);
   const [activeZoneId, setActiveZoneId] = useState<PrintZoneId>('front');
   const [selectedArtworkId, setSelectedArtworkId] = useState<string | null>(null);
-  // Mobile only: the Inspector sheet is collapsed by default so the garment
-  // gets the whole viewport, but picking a tool whose controls live inside
-  // it must open it - otherwise the tap looks like it did nothing.
+  // Mobile only: the Inspector sheet is collapsed on arrival so the garment
+  // gets the whole viewport, but picking *any* tool opens it — every tool's
+  // controls live inside it, so a tap that left it shut would look like it
+  // did nothing. Found in M04 mobile QA: the fabric picker joined the
+  // garment tool, whose controls were the one set the sheet never opened for.
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const {
     phase,
@@ -73,10 +76,30 @@ export function StudioShell() {
     updateArtworkTransform,
     centerArtwork,
     setArtworkOpacity,
+    setGarmentMaterial,
+    applyArtworkEffect,
+    clearArtworkEffect,
+    setArtworkEffectIntensity,
+    setArtworkEffectParameter,
     cameraResetToken,
   } = useStudioProject();
 
   const garment = useResolvedGarment(project);
+
+  /**
+   * The fabric the renderer will actually use.
+   *
+   * Resolved here, once, from the project's stored material and the resolved
+   * garment's own `supportedMaterials` — so a project naming a fabric this
+   * garment does not offer (a stale save, a hand-edited record) is
+   * substituted at the boundary rather than reaching Three.js. Memoised on
+   * the two inputs so an unrelated edit doesn't hand the canvas a new object
+   * and make it re-evaluate its texture keys.
+   */
+  const resolvedMaterial = useMemo(
+    () => resolveMaterial(project?.material, garment.manifest?.supportedMaterials ?? []),
+    [project?.material, garment.manifest],
+  );
   const { assets, renderLayers, adoptDecodedArtwork } = useArtworkAssets(project);
   const hasProject = project !== null;
 
@@ -84,7 +107,7 @@ export function StudioShell() {
     const definition = STUDIO_TOOLS.find((t) => t.id === tool);
     if (definition?.requiresGarment && !hasProject) return;
     setActiveTool(tool);
-    if (tool !== 'garment') setInspectorOpen(true);
+    setInspectorOpen(true);
   }
 
   function handleChooseGarment(garmentId: string) {
@@ -140,6 +163,10 @@ export function StudioShell() {
         onCenter={centerArtwork}
         onOpacity={setArtworkOpacity}
         onArtworkImported={adoptDecodedArtwork}
+        onApplyEffect={applyArtworkEffect}
+        onClearEffect={clearArtworkEffect}
+        onEffectIntensity={setArtworkEffectIntensity}
+        onEffectParameter={setArtworkEffectParameter}
       />
     ) : null;
 
@@ -206,6 +233,7 @@ export function StudioShell() {
                 className="h-full w-full"
                 manifest={garment.manifest}
                 colorHex={project.garmentColor.hex}
+                material={resolvedMaterial}
                 artworkLayers={renderLayers}
                 cameraPreset={CAMERA_PRESETS[project.camera.presetId] ?? CAMERA_PRESETS.front}
                 cameraResetToken={cameraResetToken}
@@ -249,6 +277,7 @@ export function StudioShell() {
           manifest={garment.manifest}
           onColorChange={setGarmentColor}
           onCameraPreset={setCameraPreset}
+          onMaterialChange={setGarmentMaterial}
           artworkPanel={artworkPanel}
         />
       </div>
@@ -264,7 +293,12 @@ export function StudioShell() {
           <summary className="text-secondary cursor-pointer list-none px-4 py-2.5 text-sm font-medium">
             Inspector
           </summary>
-          <div className="max-h-72 overflow-y-auto">
+          {/* Grown from max-h-72 in M04: the artwork panel gained a print-effect
+              selector, an intensity control and a parameter, which pushed the
+              effect controls below the fold on a 390x844 phone. Still capped
+              and still scrollable — the garment keeps the larger share of the
+              viewport, which is the point of the sheet. */}
+          <div className="max-h-80 overflow-y-auto">
             <Inspector
               activeTool={activeTool}
               project={project}
@@ -272,6 +306,7 @@ export function StudioShell() {
               manifest={garment.manifest}
               onColorChange={setGarmentColor}
               onCameraPreset={setCameraPreset}
+              onMaterialChange={setGarmentMaterial}
               artworkPanel={artworkPanel}
               showHeading={false}
             />

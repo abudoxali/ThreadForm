@@ -113,6 +113,27 @@ read from the header _before_ decoding — to avoid decompression-bomb-style
 resource exhaustion from a single small file. Implemented in M03; see
 "Artwork import" above for the specific limits.
 
+## Effect parameters (M04)
+
+`EffectConfiguration.parameters` is an open `Record<string, number>` in the
+domain model and a strictly allow-listed one at the point of use. Persisted
+project data is untrusted input, and an open-ended record of numbers flowing
+into a renderer is how a shader parameter becomes an injection surface — so
+`@threadform/effects-engine` keeps only the keys the effect's own preset
+declares, clamps each to its declared range, and substitutes a deterministic
+default for anything missing or non-finite. A stored `{ displacementScale:
+9999 }` or `{ __proto__: 1 }` is dropped, not forwarded.
+
+The same reasoning covers material overrides: `MaterialProperties` values are
+clamped by `@threadform/material-engine` before reaching Three.js. A NaN or
+negative roughness does not throw — it silently renders a black or blank
+garment, which reads as a renderer bug rather than as bad data.
+
+No effect or material introduces user-supplied GLSL, and none fetches an
+external asset at runtime: every fabric and thread surface in the Studio is
+generated procedurally in code (see `ARCHITECTURE.md`), so there is nothing
+to fetch and no third-party texture to trust.
+
 ## XSS prevention
 
 No user-generated content (artwork names, project names) is ever rendered as

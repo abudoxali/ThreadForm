@@ -5,6 +5,18 @@ export default defineConfig({
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
   reporter: 'list',
+  /**
+   * Well above Playwright's 30s default, because these are not typical DOM
+   * tests: the artwork and material/effect journeys each drive a real WebGL
+   * canvas through a dozen-plus screenshot-and-settle cycles, and the canvas
+   * runs `frameloop="demand"` so every measurement waits for a frame. Both
+   * take around 25 seconds alone, and several running in parallel contend
+   * for one GPU. The default was tripping them on wall-clock while every
+   * assertion still passed — raising the ceiling is the honest fix; trimming
+   * the measurements to fit would have traded real coverage for a number.
+   */
+  timeout: 120_000,
+  expect: { timeout: 10_000 },
   use: {
     baseURL: 'http://127.0.0.1:3100',
     trace: 'on-first-retry',

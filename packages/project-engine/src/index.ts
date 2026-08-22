@@ -26,6 +26,16 @@ export {
 } from './artwork';
 export type { ArtworkTransformPatch } from './artwork';
 export { setGarmentColor, setCameraPreset } from './garment';
+export { setGarmentMaterial, reconcileGarmentMaterial } from './material';
+export {
+  findArtworkEffect,
+  pruneOrphanEffects,
+  applyArtworkEffect,
+  clearArtworkEffect,
+  setArtworkEffectIntensity,
+  setArtworkEffectParameter,
+} from './effects';
+export type { ArtworkEffectDefaults } from './effects';
 export { validateProject } from './validate';
 export type { ProjectValidationResult } from './validate';
 export { migrateProject, UnknownSchemaVersionError } from './migrate';

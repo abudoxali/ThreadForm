@@ -163,3 +163,114 @@ export const isCyanInk = ({ r, g, b }: Rgb): boolean =>
 
 /** Strongly green: green well ahead of both red and blue (the SVG fixture's hue). */
 export const isGreenInk = ({ r, g, b }: Rgb): boolean => g > 90 && g - r > 45 && g - b > 45;
+
+/** Perceptual luminance, the channel most of the M04 surface measurements work in. */
+export function luminance({ r, g, b }: Rgb): number {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export interface SurfaceStats {
+  /** How many pixels the mask selected. Guards against a "difference" measured over nothing. */
+  count: number;
+  meanLuminance: number;
+  /** Mean absolute horizontal luminance gradient — high where structure runs vertically. */
+  gradientX: number;
+  /** Mean absolute vertical luminance gradient — high where structure runs horizontally. */
+  gradientY: number;
+  /** Overall local contrast, regardless of direction. */
+  texture: number;
+}
+
+/**
+ * Measures the surface character of a region of a render.
+ *
+ * M04's claims are about *surfaces* — a knit is ribbed where a weave is even,
+ * embroidery is raised where screen-printed ink is flat — so the tests
+ * measure local contrast and its direction rather than comparing pixels to a
+ * stored image. A snapshot would break on any lighting or camera change and
+ * would say nothing about whether the two materials actually differ; a
+ * gradient ratio says exactly that, and survives everything it should.
+ */
+export function measureSurface(image: DecodedImage, mask: (pixel: Rgb) => boolean): SurfaceStats {
+  const { width, height, data } = image;
+  const pixelAt = (x: number, y: number): Rgb => {
+    const index = (y * width + x) * 4;
+    return { r: data[index]!, g: data[index + 1]!, b: data[index + 2]! };
+  };
+
+  let count = 0;
+  let totalLuminance = 0;
+  let totalGradientX = 0;
+  let totalGradientY = 0;
+
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const centre = pixelAt(x, y);
+      if (!mask(centre)) continue;
+      // Only measure where the whole neighbourhood is inside the region, so
+      // the region's own edge is never mistaken for surface texture.
+      if (!mask(pixelAt(x - 1, y)) || !mask(pixelAt(x + 1, y))) continue;
+      if (!mask(pixelAt(x, y - 1)) || !mask(pixelAt(x, y + 1))) continue;
+
+      count += 1;
+      totalLuminance += luminance(centre);
+      totalGradientX += Math.abs(luminance(pixelAt(x + 1, y)) - luminance(pixelAt(x - 1, y)));
+      totalGradientY += Math.abs(luminance(pixelAt(x, y + 1)) - luminance(pixelAt(x, y - 1)));
+    }
+  }
+
+  if (count === 0) {
+    return { count: 0, meanLuminance: 0, gradientX: 0, gradientY: 0, texture: 0 };
+  }
+
+  const gradientX = totalGradientX / count;
+  const gradientY = totalGradientY / count;
+  return {
+    count,
+    meanLuminance: totalLuminance / count,
+    gradientX,
+    gradientY,
+    texture: (gradientX + gradientY) / 2,
+  };
+}
+
+/** Fraction of pixels whose luminance changed by more than `threshold` between two same-sized renders. */
+export function changedFraction(before: DecodedImage, after: DecodedImage, threshold = 6): number {
+  const length = Math.min(before.data.length, after.data.length);
+  let changed = 0;
+  let total = 0;
+  for (let index = 0; index < length; index += 4) {
+    const a = luminance({
+      r: before.data[index]!,
+      g: before.data[index + 1]!,
+      b: before.data[index + 2]!,
+    });
+    const b = luminance({
+      r: after.data[index]!,
+      g: after.data[index + 1]!,
+      b: after.data[index + 2]!,
+    });
+    total += 1;
+    if (Math.abs(a - b) > threshold) changed += 1;
+  }
+  return total === 0 ? 0 : changed / total;
+}
+
+/** Bare, undyed garment fabric: bright and near-neutral, with no fixture ink in it. */
+export const isGarmentFabric = ({ r, g, b }: Rgb): boolean =>
+  r > 110 && g > 110 && b > 100 && Math.abs(r - g) < 22 && Math.abs(g - b) < 30;
+
+/**
+ * Magenta by hue alone, tolerant of brightness.
+ *
+ * `isMagentaInk` requires a bright, saturated pixel, which is right for
+ * "is the artwork on the garment at all". It is the wrong test for "is the
+ * artwork still fully there once it has been embroidered": raised stitching
+ * shades each thread hard enough that the shadowed side of a stitch falls
+ * below that brightness floor, so a correctly-rendered embroidery measures
+ * as *less* ink than a flat print of the same artwork. This matcher keys on
+ * the colour relationship only, so it counts a print's full extent whatever
+ * the relief is doing to it.
+ */
+export const isMagentaHue = ({ r, g, b }: Rgb): boolean =>
+  r > 45 && b > 35 && r - g > 25 && b - g > 18;

@@ -1,5 +1,6 @@
 import type { ArtworkLayer, Project } from '@threadform/types';
 import { createId } from './id';
+import { pruneOrphans } from './effects';
 
 function touch(): Pick<Project['metadata'], 'updatedAt'> {
   return { updatedAt: new Date().toISOString() };
@@ -33,10 +34,17 @@ export function addArtworkLayer(
 export function removeArtworkLayer(project: Project, layerId: string): Project {
   const target = project.artworks.find((l) => l.id === layerId);
   if (!target) return project;
-  const remaining = project.artworks.filter((l) => l.id !== layerId);
+  const remaining = renumberZone(
+    project.artworks.filter((l) => l.id !== layerId),
+    target.printZoneId,
+  );
   return {
     ...project,
-    artworks: renumberZone(remaining, target.printZoneId),
+    artworks: remaining,
+    // Removing the last layer that referenced a print effect leaves its
+    // configuration behind — invisible in the UI, but real in the saved
+    // document and growing every time.
+    effects: pruneOrphans(project.effects, remaining),
     metadata: { ...project.metadata, ...touch() },
   };
 }
@@ -46,15 +54,29 @@ export function duplicateArtworkLayer(project: Project, layerId: string): Projec
   if (!source) return project;
   const zoneLayers = project.artworks.filter((l) => l.printZoneId === source.printZoneId);
   const nextOrder = Math.max(...zoneLayers.map((l) => l.order)) + 1;
+
+  // The copy gets its *own* effect configuration rather than sharing the
+  // original's: two layers pointing at one record means adjusting either
+  // silently moves the other.
+  const sourceEffect = source.effectId
+    ? project.effects.find((effect) => effect.id === source.effectId)
+    : undefined;
+  const copiedEffect = sourceEffect
+    ? { ...sourceEffect, id: createId('effect'), parameters: { ...sourceEffect.parameters } }
+    : undefined;
+
   const copy: ArtworkLayer = {
     ...source,
     id: createId('artwork'),
     name: `${source.name} copy`,
     order: nextOrder,
+    ...(copiedEffect ? { effectId: copiedEffect.id } : {}),
   };
+
   return {
     ...project,
     artworks: [...project.artworks, copy],
+    effects: copiedEffect ? [...project.effects, copiedEffect] : project.effects,
     metadata: { ...project.metadata, ...touch() },
   };
 }

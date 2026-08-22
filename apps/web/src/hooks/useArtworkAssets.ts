@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ArtworkFileKind, ArtworkLayer, Project } from '@threadform/types';
 import { decodeStoredArtwork, isArtworkFileKind } from '@threadform/artwork-engine';
 import type { DecodedArtwork } from '@threadform/artwork-engine';
+import { resolveEffect } from '@threadform/effects-engine';
 import type { ArtworkRenderLayer } from '@threadform/3d-engine';
 import { readArtworkBlob } from '@/lib/projectRepository';
 
@@ -210,6 +211,8 @@ export function useArtworkAssets(project: Project | null): UseArtworkAssetsResul
     };
   }, []);
 
+  const effects = project?.effects;
+
   const renderLayers = useMemo<ArtworkRenderLayer[]>(() => {
     if (!layers) return [];
     return layers.flatMap((layer) => {
@@ -217,6 +220,17 @@ export function useArtworkAssets(project: Project | null): UseArtworkAssetsResul
       if (!blobId) return [];
       const asset = assets[blobId];
       if (!asset || asset.status !== 'ready' || !asset.image) return [];
+
+      // Resolution happens here rather than in the renderer so the clamping
+      // and parameter allow-listing in `effects-engine` sit between the
+      // persisted project and the GPU, not after it. A layer whose stored
+      // `effectId` names an effect that no longer exists — or a kind this
+      // build cannot render — resolves to `null` and draws as the plain
+      // print it was before, rather than failing.
+      const stored = layer.effectId
+        ? effects?.find((effect) => effect.id === layer.effectId)
+        : undefined;
+
       return [
         {
           id: layer.id,
@@ -226,10 +240,11 @@ export function useArtworkAssets(project: Project | null): UseArtworkAssetsResul
           opacity: layer.opacity,
           visible: layer.visible,
           order: layer.order,
+          effect: resolveEffect(stored),
         },
       ];
     });
-  }, [layers, assets]);
+  }, [layers, assets, effects]);
 
   return { assets, renderLayers, adoptDecodedArtwork };
 }

@@ -7,7 +7,7 @@ UI (apps/web, packages/ui)
         ↓
 Application / Project State (a Project value — see PROJECT_SCHEMA.md)
         ↓
-Domain Engines (project-engine, and future material/effects/animation/export engines)
+Domain Engines (project-engine, material-engine, effects-engine; animation/export engines future)
         ↓
 Garment Runtime (garment-runtime — resolves a GarmentReference against a manifest)
         ↓
@@ -39,7 +39,7 @@ architecture exists to prevent. Concretely:
   `reorderArtworkLayer`, etc.) — components call these functions and re-render
   from the result; they do not hand-edit a `Project` object's fields.
 
-## Current physical packages (M00–M03)
+## Current physical packages (M00–M04)
 
 | Package                    | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -49,6 +49,8 @@ architecture exists to prevent. Concretely:
 | `packages/garment-runtime` | Fetches and zod-validates a garment manifest (`GARMENT_SPEC.md`), the small catalog of garments with a real manifest, camera preset definitions, and `resolveGarmentReference` (maps a `Project`'s `GarmentReference` — including M01's placeholder shape — to a real, loadable garment). No React, no Three.js.                                                                                                                                                                                                                                                                                                                |
 | `packages/3d-engine`       | React Three Fiber rendering: `StudioGarmentCanvas` (Canvas + error boundary + Suspense loading state), `GarmentModel` (GLB load via drei's `useGLTF`, per-instance material clone, color), `CameraRig` (orbit controls + preset framing), `StudioLighting` (3-point rig), `frameGarment` (pure bounding-sphere/aspect-ratio framing math, unit-tested without a GPU).                                                                                                                                                                                                                                                           |
 | `packages/artwork-engine`  | The artwork trust boundary: file-signature sniffing, size/dimension limits, SVG sanitization, and decoding a blob into a drawable image with an owned object-URL lifetime. No React, no storage, no rendering — it turns untrusted bytes into either a rejection or a safe, decoded image.                                                                                                                                                                                                                                                                                                                                      |
+| `packages/material-engine` | Fabric presets and resolution: turns a `MaterialConfiguration` plus a garment's declared `supportedMaterials` into clamped, renderer-ready surface parameters. Pure; no React, no Three.js, no GPU. Three.js is deliberately not the source of truth for what a fabric _is_.                                                                                                                                                                                                                                                                                                                                                    |
+| `packages/effects-engine`  | Print-process presets and resolution: turns an `EffectConfiguration` into clamped print parameters, with a strict per-kind allow-list for `parameters`. Pure, same constraints as above.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `packages/ui`              | Design-token CSS and presentational React primitives (`Button`, `Panel`, `IconButton`, ...). No domain knowledge.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `packages/config`          | Shared `tsconfig` and ESLint flat configs consumed by every package.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `apps/web`                 | The Next.js application: marketing site (`/`) and Studio (`/studio`). `src/lib/projectRepository.ts` is the only module that combines `project-engine` + `local-storage`; `src/hooks/useStudioProject.ts` is the only place that wires it into React state; `src/hooks/useResolvedGarment.ts` is the only place that resolves a `Project`'s garment against `garment-runtime`; `src/hooks/useArtworkAssets.ts` is the only place that turns a stored `blobId` back into a decoded image and the only place that releases its object URL. Components hold only UI-only state (active tool, selected print zone, selected layer). |
@@ -61,10 +63,10 @@ obvious home, not because empty packages should exist yet:
 - **`2d-engine`** — the flat/print-mockup rendering adapter, alongside
   `3d-engine`. Different technology needs (canvas/DOM vs. WebGL) but consumes
   the same `Project`.
-- **`material-engine`**, **`effects-engine`**, **`animation-engine`** —
-  resolve `MaterialConfiguration` / `EffectConfiguration` /
-  `AnimationConfiguration` into renderer-specific parameters. Kept separate
-  from the renderers so presets can be authored/tested without a GPU context.
+- **`animation-engine`** — resolves an `AnimationConfiguration` into
+  renderer-specific parameters. Kept separate from the renderers so presets
+  can be authored and tested without a GPU context, exactly as
+  `material-engine` and `effects-engine` (both implemented in M04) are.
 - **`export-engine`** — turns a `Project` + `ExportPreferences` into an image,
   video, or 3D file. See `EXPORT_SPEC.md` for its boundary.
 - **`entitlements`** — the single place capability checks (`canExportPro`,
@@ -199,3 +201,62 @@ material, so recolouring a shirt never tints the ink printed on it.
 `polygonOffset` keeps the two coincident surfaces from z-fighting and
 `depthWrite: false` keeps the overlay's transparent majority from punching a
 hole in the depth buffer.
+
+## Material & print-effect rendering (M04)
+
+Two more resolution boundaries, built to the same rule as the rest: the
+engines own _what a thing is_, the renderer owns _GPU resources_.
+
+`material-engine` turns a `MaterialConfiguration` plus the garment's declared
+`supportedMaterials` into a `ResolvedMaterial`; `effects-engine` turns an
+`EffectConfiguration` into a `ResolvedEffect`. Both are pure, both clamp, and
+both refuse rather than guess — an unsupported fabric resolves to a
+substitute flagged `substituted: true`, an unimplemented effect resolves to
+`null` and renders as the plain print it was before.
+
+**Why Three.js is not the source of truth.** A fabric is a set of surface
+properties, not a `MeshStandardMaterial`. Keeping the presets as plain data
+means a fabric can be authored, diffed and unit-tested without a GPU
+context, and that adding one later is a row in a table rather than another
+conditional in a component. The renderer receives numbers it applies; it
+never decides what cotton is.
+
+**Capability enforcement happens three times, on purpose.** The garment
+manifest declares what a garment supports; `availableMaterials` /
+`availableEffects` intersect that with what this build implements so the UI
+can only offer something real; `project-engine`'s mutators refuse anything
+outside the allow-list they are handed; and the resolvers substitute rather
+than render an unsupported choice. Hiding an option in the UI does nothing
+about a persisted project that already names a fabric the garment never
+offered, which is the case the last two layers exist for.
+
+**Procedural surfaces.** ThreadForm ships no fabric photographs or scans.
+Every surface is generated from `surfaceHeightField.ts` — a plain-weave, a
+knit and a satin stitch, each a seamlessly-tiling height field converted to
+a tangent-space normal map. Height first, normals second, because a height
+field is something you can reason about ("a woven thread is a rounded ridge
+that passes over and under its neighbour") and can unit-test. There is no
+randomness: the same parameters always produce the same surface, which is
+what makes the renderer's cache safe to key on them.
+
+**Texture ownership.** `surfaceTextures.ts` caches the generated _pixels_
+module-wide (a few hundred kilobytes, bounded by the number of distinct
+fabrics) and hands each material its own cheap `DataTexture` wrapper, which
+that material owns and disposes. The split exists because `repeat` and
+`rotation` live on the texture, not the material: the garment's weave and a
+screen print's ink conforming to that same weave need different tiling of
+identical pixels.
+
+**Why effects group into runs.** A print zone is drawn as an overlay mesh
+whose material carries the treatment, and one material cannot be two
+treatments at once. `groupLayersIntoEffectRuns` splits a zone's layers into
+_consecutive_ runs of identical treatment — consecutive, not bucketed by
+effect, because bucketing would silently reorder a stack where a screen
+print sits above an embroidery that sits above another screen print.
+
+**Alpha clipping is free.** The overlay material is transparent and the
+artwork texture's alpha is zero outside the print, so those texels are never
+shaded at all. A raised stitch surface cannot appear on bare fabric however
+strong the relief is, which is why the stitch surface is a small tiling
+texture rather than a normal map derived per-artwork — the mask already
+exists.

@@ -6,13 +6,18 @@ import { useGLTF } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import type { GarmentManifest } from '@threadform/garment-runtime';
 import { printZoneMeshName } from '@threadform/garment-runtime';
+import type { ResolvedMaterial } from '@threadform/material-engine';
 import type { GarmentBounds } from './frameGarment';
 import { ArtworkZoneOverlay } from './ArtworkZoneOverlay';
 import type { ArtworkRenderLayer } from './ArtworkZoneOverlay';
+import { createSurfaceNormalTexture } from './surfaceTextures';
+import { groupLayersIntoEffectRuns } from './effectRuns';
 
 export interface GarmentModelProps {
   manifest: GarmentManifest;
   colorHex: string;
+  /** The garment's fabric, already resolved and clamped by `@threadform/material-engine`. */
+  material: ResolvedMaterial;
   artworkLayers: ArtworkRenderLayer[];
   onBoundsReady: (bounds: GarmentBounds) => void;
 }
@@ -21,8 +26,8 @@ function isMesh(node: THREE.Object3D): node is THREE.Mesh {
   return (node as THREE.Mesh).isMesh === true;
 }
 
-/** Stable empty list for zones with no artwork, so those overlays don't see a new array identity each render. */
-const NO_LAYERS: ArtworkRenderLayer[] = [];
+/** Stable empty list for zones with no artwork, so those zones don't see a new array identity each render. */
+const NO_RUNS: ReturnType<typeof groupLayersIntoEffectRuns> = [];
 
 interface ZoneTarget {
   zoneId: string;
@@ -46,6 +51,7 @@ interface ZoneTarget {
 export function GarmentModel({
   manifest,
   colorHex,
+  material,
   artworkLayers,
   onBoundsReady,
 }: GarmentModelProps) {
@@ -57,6 +63,7 @@ export function GarmentModel({
   // be traversed last.
   const fabricMaterialsRef = useRef<THREE.MeshStandardMaterial[]>([]);
   const invalidate = useThree((state) => state.invalidate);
+  const maxAnisotropy = useThree((state) => state.gl.capabilities.getMaxAnisotropy());
 
   useEffect(() => {
     const fabrics: THREE.MeshStandardMaterial[] = [];
@@ -99,13 +106,67 @@ export function GarmentModel({
     // drei control's own internal change event) — a raw material mutation
     // here is otherwise invisible until something else happens to trigger a
     // frame (e.g. an orbit drag).
-    for (const material of fabricMaterialsRef.current) material.color.set(colorHex);
+    // Named `fabric`, not `material` — the latter is now a prop, and a loop
+    // variable shadowing it here would read as applying the resolved fabric.
+    for (const fabric of fabricMaterialsRef.current) fabric.color.set(colorHex);
     invalidate();
     // `cloned` is included so a manifest/scene change re-applies the current
     // color to the new clone's materials instead of leaving it at the new
     // GLB's baked-in default — the effect above rebuilds
     // `fabricMaterialsRef` on every `cloned` change, so this one must too.
   }, [colorHex, invalidate, cloned]);
+
+  /**
+   * Applies the resolved fabric to every cloned garment material.
+   *
+   * Keyed on the material's *values* rather than the object it arrived in:
+   * `resolveMaterial` is pure but its callers rebuild the result whenever
+   * the project changes, so depending on identity would regenerate the weave
+   * texture on every unrelated edit — a rename, a slider drag — and hand the
+   * GPU a new upload each time.
+   *
+   * The texture created here is owned by this effect and disposed with it.
+   * Only its *pixels* are shared (see `surfaceTextures`), so a second
+   * garment instance or a second project never inherits this one's texture
+   * state, and repeatedly switching fabrics cannot accumulate GPU memory.
+   */
+  const materialKey = `${material.materialId}:${material.roughness}:${material.metalness}:${material.normalScale}:${material.weave}:${material.weaveRepeat.u}x${material.weaveRepeat.v}:${material.detail.fabric}:${material.detail.wrinkle}:${material.detail.fiber}`;
+
+  useEffect(() => {
+    const normalMap = createSurfaceNormalTexture({
+      kind: material.weave,
+      detail: material.detail,
+      repeatU: material.weaveRepeat.u,
+      repeatV: material.weaveRepeat.v,
+      anisotropy: Math.min(8, maxAnisotropy),
+    });
+
+    for (const fabric of fabricMaterialsRef.current) {
+      fabric.roughness = material.roughness;
+      fabric.metalness = material.metalness;
+      fabric.normalMap = normalMap;
+      fabric.normalScale.set(material.normalScale, material.normalScale);
+      // Attaching a map that wasn't there before changes the shader's
+      // defines, so the program has to be rebuilt — without this the
+      // garment keeps rendering with the previous, map-less shader.
+      fabric.needsUpdate = true;
+    }
+    invalidate();
+
+    return () => {
+      for (const fabric of fabricMaterialsRef.current) {
+        if (fabric.normalMap === normalMap) {
+          fabric.normalMap = null;
+          fabric.needsUpdate = true;
+        }
+      }
+      normalMap.dispose();
+    };
+    // `material` is read above but deliberately excluded in favour of
+    // `materialKey`, which changes only when a value the GPU cares about
+    // does. `cloned` is included because a new scene clone has new material
+    // instances that have never had the weave applied.
+  }, [materialKey, cloned, maxAnisotropy, invalidate]);
 
   /**
    * Locates the mesh each declared print zone lives on, and the transform
@@ -145,14 +206,19 @@ export function GarmentModel({
   // a full-resolution canvas and re-uploads it to the GPU when its layer
   // list changes identity, so handing it a freshly-built array on every
   // render would turn an idle Studio into a texture-upload loop.
-  const layersByZone = useMemo(() => {
+  const runsByZone = useMemo(() => {
     const grouped = new Map<string, ArtworkRenderLayer[]>();
     for (const layer of artworkLayers) {
       const existing = grouped.get(layer.zoneId);
       if (existing) existing.push(layer);
       else grouped.set(layer.zoneId, [layer]);
     }
-    return grouped;
+
+    const runs = new Map<string, ReturnType<typeof groupLayersIntoEffectRuns>>();
+    for (const [zoneId, zoneLayers] of grouped) {
+      runs.set(zoneId, groupLayersIntoEffectRuns(zoneLayers));
+    }
+    return runs;
   }, [artworkLayers]);
 
   return (
@@ -165,17 +231,23 @@ export function GarmentModel({
       ]}
     >
       <primitive object={cloned} />
-      {zoneTargets.map((target) => (
-        <ArtworkZoneOverlay
-          key={target.zoneId}
-          zone={target.zone}
-          geometry={target.geometry}
-          position={target.position}
-          quaternion={target.quaternion}
-          scale={target.scale}
-          layers={layersByZone.get(target.zoneId) ?? NO_LAYERS}
-        />
-      ))}
+      {zoneTargets.map((target) =>
+        (runsByZone.get(target.zoneId) ?? NO_RUNS).map((run, index) => (
+          <ArtworkZoneOverlay
+            key={`${target.zoneId}:${run.key}`}
+            zone={target.zone}
+            geometry={target.geometry}
+            position={target.position}
+            quaternion={target.quaternion}
+            scale={target.scale}
+            layers={run.layers}
+            effect={run.effect}
+            material={material}
+            // Runs draw in stack order, after the garment itself.
+            renderOrder={2 + index}
+          />
+        )),
+      )}
     </group>
   );
 }

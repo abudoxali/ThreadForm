@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import type { PrintZoneDefinition, PrintZoneId, Transform2D } from '@threadform/types';
+import type { ResolvedEffect } from '@threadform/effects-engine';
+import type { ResolvedMaterial } from '@threadform/material-engine';
 import { artworkDrawRect, zoneTextureMapping, zoneTextureSize } from './artworkPlacement';
+import { createSurfaceNormalTexture, resolveOverlaySurface } from './surfaceTextures';
 
 /**
  * A single artwork layer, ready to draw. The image is already decoded and
@@ -20,6 +23,8 @@ export interface ArtworkRenderLayer {
   opacity: number;
   visible: boolean;
   order: number;
+  /** How this print is physically applied, resolved by `@threadform/effects-engine`. `null` is an untreated print. */
+  effect: ResolvedEffect | null;
 }
 
 export interface ArtworkZoneOverlayProps {
@@ -31,6 +36,12 @@ export interface ArtworkZoneOverlayProps {
   quaternion: THREE.Quaternion;
   scale: THREE.Vector3;
   layers: ArtworkRenderLayer[];
+  /** The treatment shared by every layer in this run — see `groupLayersIntoEffectRuns`. */
+  effect: ResolvedEffect | null;
+  /** The fabric underneath, which screen-printed ink borrows its surface from. */
+  material: ResolvedMaterial;
+  /** Runs within a zone draw in ascending order so the stack composites correctly. */
+  renderOrder: number;
 }
 
 /**
@@ -63,6 +74,9 @@ export function ArtworkZoneOverlay({
   quaternion,
   scale,
   layers,
+  effect,
+  material,
+  renderOrder,
 }: ArtworkZoneOverlayProps) {
   const invalidate = useThree((state) => state.invalidate);
   const gl = useThree((state) => state.gl);
@@ -138,7 +152,83 @@ export function ArtworkZoneOverlay({
     invalidate();
   }, [surface, visibleLayers, invalidate]);
 
+  /**
+   * The print's own physical surface: the weave a screen print's ink settles
+   * into, or the stitching an embroidery is built from.
+   *
+   * Clipping to the artwork is free and exact. The overlay material is
+   * transparent and the artwork texture's alpha is zero everywhere outside
+   * the print, so those texels are never shaded at all — a raised stitch
+   * surface cannot appear on bare fabric no matter how strong the relief
+   * is. That is why this is a small tiling texture rather than a normal map
+   * derived per-artwork: the alpha already does the masking, so deriving one
+   * would be paying to recompute a mask that already exists.
+   *
+   * Keyed on the surface's values so an unrelated edit doesn't rebuild it;
+   * owned here and disposed on change or unmount.
+   */
+  const overlaySurface = useMemo(() => resolveOverlaySurface(effect, material), [effect, material]);
+  const surfaceKey = overlaySurface
+    ? `${overlaySurface.kind}:${overlaySurface.repeat}:${overlaySurface.rotation.toFixed(4)}:${overlaySurface.detail.fabric}:${overlaySurface.detail.wrinkle}:${overlaySurface.detail.fiber}`
+    : 'none';
+
+  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  useEffect(() => {
+    // Named `printMaterial`, not `material` — the latter is the fabric prop,
+    // and shadowing it here would read as mutating the garment's surface.
+    const printMaterial = materialRef.current;
+    if (!printMaterial) return;
+
+    if (!overlaySurface) {
+      if (printMaterial.normalMap) {
+        printMaterial.normalMap = null;
+        printMaterial.needsUpdate = true;
+        invalidate();
+      }
+      return;
+    }
+
+    const texture = createSurfaceNormalTexture({
+      kind: overlaySurface.kind,
+      detail: overlaySurface.detail,
+      // A print zone is a small patch of the garment, so the relief tiles
+      // the same number of times on both axes — its canvas already has
+      // physically square pixels (see `zoneTextureSize`).
+      repeatU: overlaySurface.repeat,
+      repeatV: overlaySurface.repeat,
+      rotation: overlaySurface.rotation,
+      anisotropy: Math.min(8, gl.capabilities.getMaxAnisotropy()),
+    });
+
+    printMaterial.normalMap = texture;
+    // Assigned imperatively, with an explicit `needsUpdate`, because
+    // attaching a map a material did not previously have changes the
+    // shader's defines and the program has to be rebuilt. Letting React set
+    // the prop leaves the old, map-less program in place — the embroidery
+    // relief simply never appeared, which is exactly how this was found
+    // during M04 visual QA.
+    printMaterial.needsUpdate = true;
+    invalidate();
+
+    return () => {
+      if (printMaterial.normalMap === texture) {
+        printMaterial.normalMap = null;
+        printMaterial.needsUpdate = true;
+      }
+      texture.dispose();
+    };
+    // `overlaySurface` is read above but excluded in favour of `surfaceKey`,
+    // which changes only when a value the GPU cares about does.
+  }, [surfaceKey, gl, invalidate]);
+
   if (!surface || visibleLayers.length === 0) return null;
+
+  // Untreated prints keep exactly the surface M03 shipped, so adding effects
+  // to the product did not quietly restyle every existing project.
+  const roughness = overlaySurface?.roughness ?? 0.82;
+  const metalness = overlaySurface?.metalness ?? 0;
+  const normalScale = overlaySurface?.normalScale ?? 0;
 
   return (
     <mesh
@@ -146,18 +236,34 @@ export function ArtworkZoneOverlay({
       position={position}
       quaternion={quaternion}
       scale={scale}
-      renderOrder={2}
+      renderOrder={renderOrder}
     >
       <meshStandardMaterial
+        ref={materialRef}
         map={surface.texture}
+        normalScale={normalScaleVector(normalScale)}
         transparent
         depthWrite={false}
         polygonOffset
         polygonOffsetFactor={-4}
         polygonOffsetUnits={-4}
-        roughness={0.82}
-        metalness={0}
+        roughness={roughness}
+        metalness={metalness}
       />
     </mesh>
   );
+}
+
+/**
+ * R3F diffs `normalScale` by identity, so a fresh `Vector2` per render would
+ * make it re-assign every frame. Cached per value instead.
+ */
+const normalScaleCache = new Map<number, THREE.Vector2>();
+function normalScaleVector(scale: number): THREE.Vector2 {
+  const rounded = Math.round(scale * 1000) / 1000;
+  const cached = normalScaleCache.get(rounded);
+  if (cached) return cached;
+  const vector = new THREE.Vector2(rounded, rounded);
+  normalScaleCache.set(rounded, vector);
+  return vector;
 }

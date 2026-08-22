@@ -11,3 +11,14 @@ export {
   ZONE_TEXTURE_MAX_PX,
 } from './artworkPlacement';
 export type { ArtworkDrawRect, ZoneTextureMapping } from './artworkPlacement';
+export {
+  createSurfaceNormalTexture,
+  getSurfaceNormalData,
+  resolveOverlaySurface,
+  SURFACE_TEXTURE_SIZE,
+} from './surfaceTextures';
+export type { OverlaySurface, SurfaceTextureOptions } from './surfaceTextures';
+export { buildHeightField, heightFieldToNormalRgba } from './surfaceHeightField';
+export type { SurfaceKind, SurfaceDetail, HeightFieldSpec } from './surfaceHeightField';
+export { groupLayersIntoEffectRuns } from './effectRuns';
+export type { ArtworkEffectRun } from './effectRuns';

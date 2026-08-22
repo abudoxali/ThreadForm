@@ -2,7 +2,14 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
-import type { ArtworkLayer, PrintZoneDefinition, PrintZoneId, Project } from '@threadform/types';
+import type {
+  ArtworkLayer,
+  EffectConfiguration,
+  EffectKind,
+  PrintZoneDefinition,
+  PrintZoneId,
+  Project,
+} from '@threadform/types';
 import type { GarmentManifest } from '@threadform/garment-runtime';
 import {
   MIN_ARTWORK_SCALE,
@@ -10,6 +17,8 @@ import {
   rotatedHalfExtent,
 } from '@threadform/project-engine';
 import type { ArtworkTransformPatch } from '@threadform/project-engine';
+import { findArtworkEffect } from '@threadform/project-engine';
+import { availableEffects, findEffectPreset } from '@threadform/effects-engine';
 import {
   ACCEPTED_ARTWORK_LABEL,
   ARTWORK_ACCEPT_ATTRIBUTE,
@@ -40,6 +49,15 @@ export interface ArtworkPanelProps {
   onCenter: (layerId: string) => void;
   onOpacity: (layerId: string, opacity: number) => void;
   onArtworkImported: (blobId: string, decoded: DecodedArtwork) => void;
+  onApplyEffect: (layerId: string, kind: EffectKind, allowed: readonly EffectKind[]) => void;
+  onClearEffect: (layerId: string) => void;
+  onEffectIntensity: (layerId: string, intensity: number) => void;
+  onEffectParameter: (
+    layerId: string,
+    key: string,
+    value: number,
+    range: { min: number; max: number },
+  ) => void;
 }
 
 const HEADING_CLASS = 'text-tertiary text-xs font-medium uppercase tracking-wide';
@@ -185,6 +203,10 @@ export function ArtworkPanel({
   onCenter,
   onOpacity,
   onArtworkImported,
+  onApplyEffect,
+  onClearEffect,
+  onEffectIntensity,
+  onEffectParameter,
 }: ArtworkPanelProps) {
   const idPrefix = useId();
   const [busy, setBusy] = useState(false);
@@ -355,6 +377,19 @@ export function ArtworkPanel({
       </div>
 
       {selectedLayer && (
+        <PrintEffectControls
+          idPrefix={idPrefix}
+          layer={selectedLayer}
+          effect={findArtworkEffect(project, selectedLayer) ?? null}
+          supportedEffects={manifest.supportedEffects}
+          onApply={onApplyEffect}
+          onClear={onClearEffect}
+          onIntensity={onEffectIntensity}
+          onParameter={onEffectParameter}
+        />
+      )}
+
+      {selectedLayer && (
         <ArtworkPlacementControls
           idPrefix={idPrefix}
           layer={selectedLayer}
@@ -502,5 +537,148 @@ function ArtworkPlacementControls({
         onFile={onReplace}
       />
     </div>
+  );
+}
+
+interface PrintEffectControlsProps {
+  idPrefix: string;
+  layer: ArtworkLayer;
+  effect: EffectConfiguration | null;
+  /** Straight from the garment's manifest — the authoritative list of processes it can be printed with. */
+  supportedEffects: readonly EffectKind[];
+  onApply: (layerId: string, kind: EffectKind, allowed: readonly EffectKind[]) => void;
+  onClear: (layerId: string) => void;
+  onIntensity: (layerId: string, intensity: number) => void;
+  onParameter: (
+    layerId: string,
+    key: string,
+    value: number,
+    range: { min: number; max: number },
+  ) => void;
+}
+
+/**
+ * How the selected artwork is printed.
+ *
+ * Options come from `availableEffects`, the intersection of the garment
+ * manifest's `supportedEffects` and what this build actually renders — so
+ * `EffectKind`'s sixteen members do not become sixteen buttons, and a
+ * process can never be offered without a real treatment behind it.
+ *
+ * Only controls that visibly do something are shown: the intensity slider is
+ * labelled per process (an embroidery's stitch relief is not a screen
+ * print's ink weight), and a parameter appears only if its effect declares
+ * one. There is deliberately no row of inert sliders here.
+ */
+function PrintEffectControls({
+  idPrefix,
+  layer,
+  effect,
+  supportedEffects,
+  onApply,
+  onClear,
+  onIntensity,
+  onParameter,
+}: PrintEffectControlsProps) {
+  const effects = availableEffects(supportedEffects);
+  if (effects.length === 0) return null;
+
+  const preset = effect ? findEffectPreset(effect.kind) : undefined;
+  const groupId = `${idPrefix}-effect-label`;
+
+  return (
+    <div className="border-border flex flex-col gap-4 border-t pt-4">
+      <div>
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className={HEADING_CLASS} id={groupId}>
+            Print effect
+          </h3>
+          <span className="text-tertiary truncate text-xs">{preset?.label ?? 'None'}</span>
+        </div>
+
+        <div role="group" aria-labelledby={groupId} className="mt-2 flex flex-wrap gap-2">
+          <EffectOption
+            label="None"
+            active={!preset}
+            title="Printed flat, with no surface treatment."
+            onClick={() => onClear(layer.id)}
+          />
+          {effects.map((candidate) => (
+            <EffectOption
+              key={candidate.kind}
+              label={candidate.label}
+              active={preset?.kind === candidate.kind}
+              title={candidate.description}
+              onClick={() => onApply(layer.id, candidate.kind, supportedEffects)}
+            />
+          ))}
+        </div>
+
+        <p className="text-tertiary mt-2 text-xs leading-relaxed">
+          {preset?.description ?? 'Printed flat, with no surface treatment.'}
+        </p>
+      </div>
+
+      {effect && preset && (
+        <>
+          <Slider
+            id={`${idPrefix}-effect-intensity`}
+            label={preset.intensityLabel}
+            min={0}
+            max={100}
+            step={PERCENT_STEP}
+            value={toPercent(effect.intensity)}
+            readout={`${toPercent(effect.intensity)}%`}
+            onChange={(value) => onIntensity(layer.id, value / 100)}
+          />
+
+          {preset.parameters.map((spec) => (
+            <Slider
+              key={spec.key}
+              id={`${idPrefix}-effect-${spec.key}`}
+              label={spec.label}
+              min={spec.min}
+              max={spec.max}
+              step={spec.step}
+              value={effect.parameters[spec.key] ?? spec.defaultValue}
+              readout={`${Math.round(effect.parameters[spec.key] ?? spec.defaultValue)}${spec.unit ?? ''}`}
+              onChange={(value) =>
+                onParameter(layer.id, spec.key, value, { min: spec.min, max: spec.max })
+              }
+            />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+function EffectOption({
+  label,
+  active,
+  title,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  title: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      title={title}
+      onClick={onClick}
+      className={`focus-visible:ring-accent-strong flex min-h-9 items-center gap-1.5 rounded-md border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+        active
+          ? 'border-accent bg-accent-muted text-primary'
+          : 'border-border bg-surface text-secondary hover:border-border-strong hover:text-primary'
+      }`}
+    >
+      {/* Icon, not colour alone, marks the active process. */}
+      {active && <CheckIcon className="text-accent-strong h-3.5 w-3.5" />}
+      {label}
+    </button>
   );
 }

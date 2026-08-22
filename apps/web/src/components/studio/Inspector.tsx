@@ -1,5 +1,7 @@
+import { useId } from 'react';
 import type { ReactNode } from 'react';
-import type { CameraPresetId, Project } from '@threadform/types';
+import type { CameraPresetId, MaterialId, Project } from '@threadform/types';
+import { availableMaterials } from '@threadform/material-engine';
 import { CAMERA_PRESETS } from '@threadform/garment-runtime';
 import type { GarmentManifest } from '@threadform/garment-runtime';
 import { Panel } from '@threadform/ui';
@@ -28,6 +30,7 @@ export interface InspectorProps {
   manifest: GarmentManifest | null;
   onColorChange: (hex: string) => void;
   onCameraPreset: (presetId: CameraPresetId) => void;
+  onMaterialChange: (materialId: MaterialId, allowed: readonly MaterialId[]) => void;
   /**
    * The artwork tool's panel, supplied by `StudioShell` rather than built
    * here: the Inspector is rendered twice (a desktop rail and a mobile
@@ -47,6 +50,7 @@ export function Inspector({
   manifest,
   onColorChange,
   onCameraPreset,
+  onMaterialChange,
   artworkPanel,
   showHeading = true,
 }: InspectorProps) {
@@ -133,6 +137,12 @@ export function Inspector({
               </label>
             </div>
           </div>
+
+          <MaterialPicker
+            supportedMaterials={manifest.supportedMaterials}
+            activeMaterialId={project.material.materialId}
+            onSelect={onMaterialChange}
+          />
         </div>
       )}
 
@@ -197,4 +207,71 @@ function isLight(hex: string): boolean {
   const b = parseInt(full.slice(4, 6), 16);
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return luminance > 0.6;
+}
+
+interface MaterialPickerProps {
+  /** Straight from the garment's manifest — the authoritative list of what this garment is made in. */
+  supportedMaterials: readonly MaterialId[];
+  activeMaterialId: MaterialId;
+  onSelect: (materialId: MaterialId, allowed: readonly MaterialId[]) => void;
+}
+
+/**
+ * Fabric selection.
+ *
+ * The options come from `availableMaterials`, which intersects what the
+ * garment's manifest declares with what the renderer actually implements —
+ * so a fabric can never appear here without something real behind it, and
+ * `MaterialId` gaining a member does not silently add an option. A garment
+ * offering only one fabric renders it as a statement rather than a choice.
+ */
+function MaterialPicker({ supportedMaterials, activeMaterialId, onSelect }: MaterialPickerProps) {
+  // The Inspector is rendered twice (desktop rail, mobile sheet), so the
+  // group’s label id has to be unique per instance.
+  const labelId = `${useId()}-material`;
+  const materials = availableMaterials(supportedMaterials);
+  if (materials.length === 0) return null;
+
+  const active = materials.find((material) => material.id === activeMaterialId);
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-tertiary text-xs font-medium uppercase tracking-wide" id={labelId}>
+          Fabric
+        </h3>
+        {active && <span className="text-tertiary text-xs">{active.label}</span>}
+      </div>
+
+      {materials.length === 1 ? (
+        <p className="text-secondary mt-1.5 text-sm">{materials[0]!.label}</p>
+      ) : (
+        <div role="group" aria-labelledby={labelId} className="mt-2 flex flex-wrap gap-2">
+          {materials.map((material) => {
+            const isActive = material.id === activeMaterialId;
+            return (
+              <button
+                key={material.id}
+                type="button"
+                aria-pressed={isActive}
+                title={material.description}
+                onClick={() => onSelect(material.id, supportedMaterials)}
+                className={`focus-visible:ring-accent-strong flex min-h-9 items-center gap-1.5 rounded-md border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+                  isActive
+                    ? 'border-accent bg-accent-muted text-primary'
+                    : 'border-border bg-surface text-secondary hover:border-border-strong hover:text-primary'
+                }`}
+              >
+                {/* An icon marks the active fabric, so the state does not depend on colour alone. */}
+                {isActive && <CheckIcon className="text-accent-strong h-3.5 w-3.5" />}
+                {material.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {active && <p className="text-tertiary mt-2 text-xs leading-relaxed">{active.description}</p>}
+    </div>
+  );
 }

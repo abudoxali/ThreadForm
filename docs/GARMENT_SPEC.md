@@ -126,8 +126,21 @@ This is the real shape served today at
 
 - **`supportedMaterials` / `supportedEffects` / `compatibleAnimations`** —
   allow-lists. The Studio must not offer a control for a material, effect,
-  or animation a garment doesn't support (not yet enforced in UI — no
-  material/effect/animation controls exist yet to enforce it against).
+  or animation a garment doesn't support.
+  - Enforced as of M04 for materials and effects, in three places rather
+    than one: `availableMaterials` / `availableEffects`
+    (`material-engine` / `effects-engine`) intersect the manifest's list
+    with what the build actually implements, so the UI can only offer
+    something real; `project-engine`'s mutators refuse anything outside the
+    allow-list they are handed; and the resolvers substitute rather than
+    render an unsupported choice. The last two exist because hiding an
+    option in the UI does nothing about a persisted project that already
+    names a fabric this garment never offered.
+  - A manifest may list a material or effect this build has no
+    implementation for — that is not an error, it simply is not offered.
+    That is what keeps `MaterialId`'s nine members and `EffectKind`'s
+    sixteen from becoming controls before anything real is behind them.
+  - `compatibleAnimations` remains unenforced; no animation controls exist.
 - **`cameraPresets`** — must be non-empty and only reference ids
   `packages/garment-runtime`'s `CAMERA_PRESETS` actually defines (`front`,
   `back`, `three-quarter`, `side`, `top`, `custom`).
