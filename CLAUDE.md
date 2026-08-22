@@ -15,15 +15,19 @@ packages/types         Strict TS domain contracts (Project, Garment, Material, .
 packages/project-engine  Pure functions: create/validate/migrate/mutate a Project
 packages/local-storage   IndexedDB persistence adapter (save/load/list/delete a Project)
 packages/garment-runtime  Garment manifest schema/validation, catalog, camera presets,
-                         legacy-reference resolution — no rendering
+                         print-zone lookup, legacy-reference resolution — no rendering
+packages/artwork-engine  Artwork trust boundary: file-signature sniffing, size/dimension
+                         limits, SVG sanitization, decode + object-URL lifetime
 packages/3d-engine       React Three Fiber garment canvas: GLB loading, lighting rig,
-                         camera framing/orbit, color, error boundary
+                         camera framing/orbit, color, print-zone artwork overlays,
+                         error boundary
 packages/ui             Design tokens (tokens.css) + presentational React primitives
 packages/config         Shared tsconfig + ESLint flat configs
 assets/garments/        Source-of-truth original garment assets (GLB + manifest.json +
                          PROVENANCE.md), copied into apps/web/public/garments for serving
-scripts/                Asset generation/verification scripts (e.g. the procedural
-                         garment generator — see PROVENANCE.md for regeneration)
+scripts/                Asset generation/verification scripts (the procedural garment
+                         generator/verifier — see PROVENANCE.md — and the E2E artwork
+                         fixture generator)
 docs/                  Product, architecture, design, schema, garment, export, privacy specs
 ```
 
@@ -34,8 +38,10 @@ that repository into React state (debounced autosave, restore-on-mount).
 Components call the hook, never the repository or `local-storage` directly.
 `useResolvedGarment` (`apps/web/src/hooks`) resolves a `Project`'s
 `GarmentReference` against `garment-runtime`'s catalog/manifest and is the
-only place that does so; `StudioShell` renders `3d-engine`'s
-`StudioGarmentCanvas` from the result — never inline Three.js in a component.
+only place that does so; `useArtworkAssets` is the only place a stored
+artwork `blobId` becomes a decoded image, and the only place its object URL
+is released. `StudioShell` renders `3d-engine`'s `StudioGarmentCanvas` from
+the result — never inline Three.js in a component.
 
 Other packages named in `docs/ARCHITECTURE.md` (2d-engine, material-engine,
 effects-engine, animation-engine, export-engine, entitlements, analytics) are
@@ -78,8 +84,8 @@ Run from the repo root (Turborepo fans out per package):
 ## No fake implementations
 
 Never present a control as functional when it isn't wired to real behavior.
-If a feature doesn't exist yet (e.g. artwork upload/placement, materials
-beyond base color, or export — still ahead as of M02), the UI must say so
+If a feature doesn't exist yet (e.g. materials beyond base color, effects,
+animation, or export — still ahead as of M03), the UI must say so
 honestly (disabled state + explanatory `title`, or descriptive placeholder
 copy) rather than simulate output. No fake social proof, no fake metrics, no
 placeholder data presented as real.

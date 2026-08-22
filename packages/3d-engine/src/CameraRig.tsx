@@ -38,7 +38,7 @@ export function CameraRig({ preset, bounds, resetToken }: CameraRigProps) {
   useEffect(() => {
     if (!bounds) return;
     const perspective = camera as THREE.PerspectiveCamera;
-    const framed = frameGarment(bounds, preset, perspective.fov ?? 32, aspect);
+    const framed = frameGarment(bounds, preset, perspective.fov ?? 26, aspect);
 
     camera.position.copy(framed.position);
     camera.lookAt(framed.target);
@@ -55,25 +55,31 @@ export function CameraRig({ preset, bounds, resetToken }: CameraRigProps) {
     // list — see the dedicated effect below, which owns aspect-only changes.
   }, [preset, bounds, camera, resetToken, invalidate]);
 
-  // A resize (window resize, or the mobile Inspector sheet expanding/
-  // collapsing) only needs the orbit *constraints* refreshed for the new
-  // aspect ratio, and only needs to dolly the camera in if the user's
-  // current distance would now clip the garment — it must never reset the
-  // angle the user has orbited to.
+  // A resize (window resize, or the mobile Inspector sheet expanding and
+  // collapsing) refreshes the orbit constraints and re-fits the camera's
+  // *distance* for the new aspect ratio, along whatever direction the user
+  // is currently viewing from. The orbit angle they chose is preserved —
+  // that is what M02 established and it still holds — but the distance is
+  // not: how far away the garment has to be to fill the canvas is a
+  // property of the canvas, not of the user's viewpoint. Leaving distance
+  // alone made the garment shrink into a corner of a canvas that had got
+  // shorter, which is exactly what happens on mobile when the Inspector
+  // sheet opens (found during M03 visual QA at 390x844).
   useEffect(() => {
     if (!bounds) return;
     const controls = controlsRef.current;
     if (!controls) return;
     const perspective = camera as THREE.PerspectiveCamera;
-    const framed = frameGarment(bounds, preset, perspective.fov ?? 32, aspect);
+    const framed = frameGarment(bounds, preset, perspective.fov ?? 26, aspect);
 
     controls.minDistance = framed.minDistance;
     controls.maxDistance = framed.maxDistance;
 
-    const currentDistance = camera.position.distanceTo(controls.target);
-    if (currentDistance > framed.maxDistance) {
-      const direction = camera.position.clone().sub(controls.target).normalize();
-      camera.position.copy(controls.target).add(direction.multiplyScalar(framed.maxDistance));
+    const direction = camera.position.clone().sub(controls.target);
+    if (direction.lengthSq() > 0) {
+      camera.position
+        .copy(controls.target)
+        .add(direction.normalize().multiplyScalar(framed.distance));
     }
     controls.update();
     invalidate();

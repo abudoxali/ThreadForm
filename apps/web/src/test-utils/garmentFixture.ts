@@ -4,7 +4,7 @@ import type { GarmentManifest } from '@threadform/garment-runtime';
 export const ESSENTIAL_TEE_MANIFEST: GarmentManifest = {
   garmentId: 'threadform-essential-tee',
   slug: 'threadform-essential-tee',
-  version: '1.0.0',
+  version: '1.1.0',
   name: 'ThreadForm Essential Tee',
   category: 't-shirt',
   readiness: 'development',
@@ -22,8 +22,22 @@ export const ESSENTIAL_TEE_MANIFEST: GarmentManifest = {
   },
   defaultColor: '#f5f5f0',
   printZones: [
-    { id: 'front', label: 'Front', maxWidth: 0.5, maxHeight: 0.55 },
-    { id: 'back', label: 'Back', maxWidth: 0.5, maxHeight: 0.55 },
+    {
+      id: 'front',
+      label: 'Front',
+      maxWidth: 1,
+      maxHeight: 1,
+      uvRect: { x: 0.17, y: 0.4, width: 0.16, height: 0.42 },
+      aspectRatio: 1,
+    },
+    {
+      id: 'back',
+      label: 'Back',
+      maxWidth: 1,
+      maxHeight: 1,
+      uvRect: { x: 0.67, y: 0.4, width: 0.16, height: 0.42 },
+      aspectRatio: 1,
+    },
   ],
   supportedMaterials: ['cotton', 'jersey'],
   supportedEffects: ['screen-print', 'embroidery'],

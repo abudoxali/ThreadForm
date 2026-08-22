@@ -3,6 +3,7 @@ export type { CatalogEntry } from './catalog';
 export { loadManifest } from './manifest';
 export type { ManifestLoadResult } from './manifest';
 export { resolveGarmentReference } from './resolve';
+export { findPrintZone, defaultPrintZone, printZoneMeshName } from './printZones';
 export { CAMERA_PRESETS, getCameraPreset } from './cameraPresets';
 export { garmentManifestSchema } from './schema';
 export type {

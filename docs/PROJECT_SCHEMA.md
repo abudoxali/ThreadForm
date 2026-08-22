@@ -89,10 +89,26 @@ M02 they drive a real 3D render. `useResolvedGarment`
 `StudioGarmentCanvas` renders the result using `garmentColor.hex` and the
 camera preset in `camera.presetId`. See `GARMENT_SPEC.md` for the manifest
 shape and `ARCHITECTURE.md`'s "Garment resolution & rendering" section for
-the M01-placeholder compatibility path. `material`, `artworks`, `printZones`,
-`effects`, `animation`, and `background` remain unconsumed — the schema
-models them ahead of the milestones that will read them, per this doc's
-original design intent.
+the M01-placeholder compatibility path.
+
+As of M03, `artworks` is real too. Each `ArtworkLayer` references its image
+by `ArtworkSource.blobId` only; the bytes live in `local-storage`'s separate
+`artworks` object store, which is what keeps a project document small enough
+to re-serialize on every debounced autosave. `local-blob` sources also carry
+`pixelWidth`/`pixelHeight`/`byteSize`, recorded at import time by
+`@threadform/artwork-engine` — the renderer divides by those dimensions to
+aspect-correct a layer, and the Studio uses them to restore a placement
+before the image has finished decoding.
+
+`transform` is stored as given and clamped at the point of use rather than
+at validation time: the limits belong to the _garment's_ print zone, which
+`projectSchema` cannot see. A manifest that tightens a zone's limits
+therefore brings existing artwork back into range instead of failing the
+whole project's validation.
+
+`material`, `printZones`, `effects`, `animation`, and `background` remain
+unconsumed — the schema models them ahead of the milestones that will read
+them, per this doc's original design intent.
 
 ## Non-trivial domain behavior
 
@@ -105,6 +121,25 @@ that have real logic worth testing (see `*.test.ts` beside each module):
   sequence within a zone after removal or a move.
 - `duplicateArtworkLayer` — appends a copy at the end of the zone's stack.
 - `centerArtworkLayer` — resets position without touching rotation/scale.
+
+`packages/project-engine/src/artwork.ts` (M03) adds placement, all of it
+working in zone-normalized units and clamped against a `PrintZoneDefinition`
+supplied by the caller — the domain layer never guesses a garment's limits:
+
+- `clampArtworkTransform` — the single clamp every placement change goes
+  through. Bounds scale to the zone's allowance, normalizes rotation to
+  `(-180, 180]`, and holds the artwork's _rotated_ bounding box inside the
+  zone (a 45-degree square needs ~1.41x the room an unrotated one does).
+- `artworkHeightFraction` / `fitArtworkScale` — aspect correction. A zone's
+  UV space is not physically uniform, so the manifest's `aspectRatio` is what
+  keeps a square logo square instead of stretching it to the zone's shape.
+- `setArtworkTransform` — applies a partial change and re-clamps; returns the
+  same project reference when the clamped result is unchanged, so a slider
+  dragged against its limit doesn't churn autosave.
+- `moveArtworkLayerToZone` — re-clamps against the destination's limits and
+  renumbers the source zone's remaining layers.
+- `replaceArtworkSource` — swaps the image, keeping the layer's identity,
+  zone and stacking order, and re-fitting placement to the new aspect ratio.
 
 ## Future migration example
 

@@ -11,7 +11,7 @@ Domain Engines (project-engine, and future material/effects/animation/export eng
         ↓
 Garment Runtime (garment-runtime — resolves a GarmentReference against a manifest)
         ↓
-Renderer / Persistence / Export adapters (3d-engine, local-storage implemented; 2d-engine, export-engine future)
+Renderer / Persistence / Export adapters (3d-engine, local-storage, artwork-engine implemented; 2d-engine, export-engine future)
 ```
 
 Dependencies point downward only. A package never imports something above it
@@ -39,18 +39,19 @@ architecture exists to prevent. Concretely:
   `reorderArtworkLayer`, etc.) — components call these functions and re-render
   from the result; they do not hand-edit a `Project` object's fields.
 
-## Current physical packages (M00–M02)
+## Current physical packages (M00–M03)
 
-| Package                    | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/types`           | Strict TypeScript contracts for the project domain model. Zero runtime _dependencies_ — its only runtime code is the `CURRENT_PROJECT_SCHEMA_VERSION` constant.                                                                                                                                                                                                                                                                  |
-| `packages/project-engine`  | Creates, validates, migrates and mutates `Project` values. Pure functions; no React, no storage, no rendering.                                                                                                                                                                                                                                                                                                                   |
-| `packages/local-storage`   | IndexedDB persistence adapter (via `idb`): save/load/list/delete a `Project`, plus a small "last opened project" pointer. Depends on `project-engine` for `validateProject`/`migrateProject` on every read; no React.                                                                                                                                                                                                            |
-| `packages/garment-runtime` | Fetches and zod-validates a garment manifest (`GARMENT_SPEC.md`), the small catalog of garments with a real manifest, camera preset definitions, and `resolveGarmentReference` (maps a `Project`'s `GarmentReference` — including M01's placeholder shape — to a real, loadable garment). No React, no Three.js.                                                                                                                 |
-| `packages/3d-engine`       | React Three Fiber rendering: `StudioGarmentCanvas` (Canvas + error boundary + Suspense loading state), `GarmentModel` (GLB load via drei's `useGLTF`, per-instance material clone, color), `CameraRig` (orbit controls + preset framing), `StudioLighting` (3-point rig), `frameGarment` (pure bounding-sphere/aspect-ratio framing math, unit-tested without a GPU).                                                            |
-| `packages/ui`              | Design-token CSS and presentational React primitives (`Button`, `Panel`, `IconButton`, ...). No domain knowledge.                                                                                                                                                                                                                                                                                                                |
-| `packages/config`          | Shared `tsconfig` and ESLint flat configs consumed by every package.                                                                                                                                                                                                                                                                                                                                                             |
-| `apps/web`                 | The Next.js application: marketing site (`/`) and Studio (`/studio`). `src/lib/projectRepository.ts` is the only module that combines `project-engine` + `local-storage`; `src/hooks/useStudioProject.ts` is the only place that wires it into React state; `src/hooks/useResolvedGarment.ts` is the only place that resolves a `Project`'s garment against `garment-runtime`. Components hold only UI-only state (active tool). |
+| Package                    | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/types`           | Strict TypeScript contracts for the project domain model. Zero runtime _dependencies_ — its only runtime code is the `CURRENT_PROJECT_SCHEMA_VERSION` constant.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `packages/project-engine`  | Creates, validates, migrates and mutates `Project` values. Pure functions; no React, no storage, no rendering.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `packages/local-storage`   | IndexedDB persistence adapter (via `idb`): save/load/list/delete a `Project`, plus a small "last opened project" pointer. Depends on `project-engine` for `validateProject`/`migrateProject` on every read; no React.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `packages/garment-runtime` | Fetches and zod-validates a garment manifest (`GARMENT_SPEC.md`), the small catalog of garments with a real manifest, camera preset definitions, and `resolveGarmentReference` (maps a `Project`'s `GarmentReference` — including M01's placeholder shape — to a real, loadable garment). No React, no Three.js.                                                                                                                                                                                                                                                                                                                |
+| `packages/3d-engine`       | React Three Fiber rendering: `StudioGarmentCanvas` (Canvas + error boundary + Suspense loading state), `GarmentModel` (GLB load via drei's `useGLTF`, per-instance material clone, color), `CameraRig` (orbit controls + preset framing), `StudioLighting` (3-point rig), `frameGarment` (pure bounding-sphere/aspect-ratio framing math, unit-tested without a GPU).                                                                                                                                                                                                                                                           |
+| `packages/artwork-engine`  | The artwork trust boundary: file-signature sniffing, size/dimension limits, SVG sanitization, and decoding a blob into a drawable image with an owned object-URL lifetime. No React, no storage, no rendering — it turns untrusted bytes into either a rejection or a safe, decoded image.                                                                                                                                                                                                                                                                                                                                      |
+| `packages/ui`              | Design-token CSS and presentational React primitives (`Button`, `Panel`, `IconButton`, ...). No domain knowledge.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `packages/config`          | Shared `tsconfig` and ESLint flat configs consumed by every package.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `apps/web`                 | The Next.js application: marketing site (`/`) and Studio (`/studio`). `src/lib/projectRepository.ts` is the only module that combines `project-engine` + `local-storage`; `src/hooks/useStudioProject.ts` is the only place that wires it into React state; `src/hooks/useResolvedGarment.ts` is the only place that resolves a `Project`'s garment against `garment-runtime`; `src/hooks/useArtworkAssets.ts` is the only place that turns a stored `blobId` back into a decoded image and the only place that releases its object URL. Components hold only UI-only state (active tool, selected print zone, selected layer). |
 
 ## Documented future boundaries (not yet implemented)
 
@@ -155,3 +156,46 @@ prop change (a material color, an imperative camera move) must call R3F's
 user-driven orbiting, but `GarmentModel`'s color effect and `CameraRig`'s
 preset-framing effect call it explicitly, since a demand frame loop does not
 infer that a `useEffect` mutated something it should redraw.
+
+## Artwork import, placement & projection (M03)
+
+Artwork crosses four boundaries on its way from a file picker to a garment,
+and each one is owned by exactly one module:
+
+1. **Trust** — `packages/artwork-engine`. A selected file is identified by
+   its _actual signature_ (never its MIME type or extension), size- and
+   dimension-limited before anything is decoded, and — for SVG — parsed and
+   rebuilt with scripts, event handlers, embedded HTML and external
+   references removed. What it returns is the bytes that should be stored,
+   which for SVG are the sanitized document rather than the upload.
+2. **Persistence** — `packages/local-storage`'s `artworks` object store
+   (IndexedDB v2), reached only through `apps/web/src/lib/projectRepository.ts`.
+   A `Project` references artwork by `blobId` alone; the bytes never enter
+   the project document, so autosave stays cheap regardless of image size.
+   Deleting a project deletes the blobs only it referenced.
+3. **Domain** — `packages/project-engine`'s `artwork.ts`. Position, scale and
+   rotation are pure `Project` transformations in zone-normalized units,
+   clamped against a `PrintZoneDefinition` the caller supplies. No component
+   hand-edits an `ArtworkLayer`.
+4. **Rendering** — `packages/3d-engine`'s `ArtworkZoneOverlay`, driven by
+   `apps/web/src/hooks/useArtworkAssets.ts`, which is the only place that
+   turns stored blob ids back into decoded images and the only place that
+   releases their object URLs.
+
+**Why print zones are UV rectangles.** A garment's manifest declares each
+print zone's `uvRect` (`GARMENT_SPEC.md`), and the renderer maps a
+zone-sized texture onto exactly that rectangle of the garment's own UVs.
+This is what lets two zones share one mesh: the Essential Tee's front and
+back are both on `Mesh_Torso`, separated only by disjoint UV rectangles. It
+also means the print is part of the garment's surface — it curves with the
+body, takes the same lighting, is occluded when rotated away, and costs
+nothing per frame. Screen-space overlays and per-frame decal regeneration
+were both rejected for exactly those reasons.
+
+**Why the garment's base colour and its artwork are separate materials.**
+The artwork overlay is a second mesh reusing the garment mesh's geometry,
+with its own transparent, UV-mapped material. Colour lives on the garment's
+material, so recolouring a shirt never tints the ink printed on it.
+`polygonOffset` keeps the two coincident surfaces from z-fighting and
+`depthWrite: false` keeps the overlay's transparent majority from punching a
+hole in the depth buffer.

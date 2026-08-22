@@ -113,11 +113,30 @@ const CAMERA_PRESET_IDS = [
   'custom',
 ] as const satisfies readonly CameraPresetId[];
 
+/**
+ * A print zone's rectangle in the garment model's UV layout. Both axes are
+ * 0–1 and the rectangle must fit inside that square — a zone running off
+ * the edge of UV space would silently sample whatever the texture's wrap
+ * mode returned there rather than the region the garment author meant.
+ */
+const uvRectSchema = z
+  .object({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    width: z.number().positive().max(1),
+    height: z.number().positive().max(1),
+  })
+  .refine((rect) => rect.x + rect.width <= 1 && rect.y + rect.height <= 1, {
+    message: 'uvRect must fit inside the 0–1 UV square',
+  });
+
 const printZoneDefinitionSchema = z.object({
   id: z.enum(PRINT_ZONE_IDS),
   label: z.string().min(1),
   maxWidth: z.number().positive().max(1),
   maxHeight: z.number().positive().max(1),
+  uvRect: uvRectSchema,
+  aspectRatio: z.number().positive(),
 });
 
 const meshNamingSchema = z.object({

@@ -6,6 +6,13 @@ export {
   projectExists,
 } from './projects';
 export {
+  saveArtworkBlob,
+  loadArtworkBlob,
+  deleteArtworkBlob,
+  listArtworkBlobIds,
+} from './artworks';
+export type { StoredArtworkBlob } from './artworks';
+export {
   getLastOpenedProjectId,
   setLastOpenedProjectId,
   clearLastOpenedProjectId,

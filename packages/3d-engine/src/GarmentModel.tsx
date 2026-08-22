@@ -5,16 +5,32 @@ import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import type { GarmentManifest } from '@threadform/garment-runtime';
+import { printZoneMeshName } from '@threadform/garment-runtime';
 import type { GarmentBounds } from './frameGarment';
+import { ArtworkZoneOverlay } from './ArtworkZoneOverlay';
+import type { ArtworkRenderLayer } from './ArtworkZoneOverlay';
 
 export interface GarmentModelProps {
   manifest: GarmentManifest;
   colorHex: string;
+  artworkLayers: ArtworkRenderLayer[];
   onBoundsReady: (bounds: GarmentBounds) => void;
 }
 
 function isMesh(node: THREE.Object3D): node is THREE.Mesh {
   return (node as THREE.Mesh).isMesh === true;
+}
+
+/** Stable empty list for zones with no artwork, so those overlays don't see a new array identity each render. */
+const NO_LAYERS: ArtworkRenderLayer[] = [];
+
+interface ZoneTarget {
+  zoneId: string;
+  zone: GarmentManifest['printZones'][number];
+  geometry: THREE.BufferGeometry;
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+  scale: THREE.Vector3;
 }
 
 /**
@@ -27,7 +43,12 @@ function isMesh(node: THREE.Object3D): node is THREE.Mesh {
  * second instance of the same garment). Only what was cloned here is
  * disposed on unmount/manifest change — the cached geometry is left alone.
  */
-export function GarmentModel({ manifest, colorHex, onBoundsReady }: GarmentModelProps) {
+export function GarmentModel({
+  manifest,
+  colorHex,
+  artworkLayers,
+  onBoundsReady,
+}: GarmentModelProps) {
   const { scene } = useGLTF(manifest.model.reference);
   const cloned = useMemo(() => scene.clone(true), [scene]);
   // Every mesh gets its own cloned material instance below (even meshes that
@@ -86,15 +107,75 @@ export function GarmentModel({ manifest, colorHex, onBoundsReady }: GarmentModel
     // `fabricMaterialsRef` on every `cloned` change, so this one must too.
   }, [colorHex, invalidate, cloned]);
 
+  /**
+   * Locates the mesh each declared print zone lives on, and the transform
+   * that mesh has *relative to the garment root*.
+   *
+   * The relative transform matters because a GLB is free to put its meshes
+   * under nested, transformed nodes. Reading it off the cloned graph rather
+   * than assuming an identity transform means the overlay lands exactly on
+   * the surface it is printing onto, for any garment — not just one whose
+   * exporter happened to write flat nodes.
+   *
+   * Zones sharing a mesh (the Essential Tee's front and back both live on
+   * `Mesh_Torso`) each get their own entry; what separates them is the
+   * `uvRect` in the manifest, not the geometry.
+   */
+  const zoneTargets = useMemo<ZoneTarget[]>(() => {
+    cloned.updateMatrixWorld(true);
+    const rootInverse = new THREE.Matrix4().copy(cloned.matrixWorld).invert();
+
+    return manifest.printZones.flatMap((zone) => {
+      const meshName = printZoneMeshName(manifest, zone.id);
+      if (!meshName) return [];
+      const target = cloned.getObjectByName(meshName);
+      if (!target || !isMesh(target)) return [];
+
+      const relative = new THREE.Matrix4().multiplyMatrices(rootInverse, target.matrixWorld);
+      const position = new THREE.Vector3();
+      const quaternion = new THREE.Quaternion();
+      const scale = new THREE.Vector3();
+      relative.decompose(position, quaternion, scale);
+
+      return [{ zoneId: zone.id, zone, geometry: target.geometry, position, quaternion, scale }];
+    });
+  }, [cloned, manifest]);
+
+  // Grouped once per artwork change, not per render: each overlay repaints
+  // a full-resolution canvas and re-uploads it to the GPU when its layer
+  // list changes identity, so handing it a freshly-built array on every
+  // render would turn an idle Studio into a texture-upload loop.
+  const layersByZone = useMemo(() => {
+    const grouped = new Map<string, ArtworkRenderLayer[]>();
+    for (const layer of artworkLayers) {
+      const existing = grouped.get(layer.zoneId);
+      if (existing) existing.push(layer);
+      else grouped.set(layer.zoneId, [layer]);
+    }
+    return grouped;
+  }, [artworkLayers]);
+
   return (
-    <primitive
-      object={cloned}
+    <group
       scale={manifest.model.scale}
       rotation={[
         THREE.MathUtils.degToRad(manifest.model.orientationDegrees.x),
         THREE.MathUtils.degToRad(manifest.model.orientationDegrees.y),
         THREE.MathUtils.degToRad(manifest.model.orientationDegrees.z),
       ]}
-    />
+    >
+      <primitive object={cloned} />
+      {zoneTargets.map((target) => (
+        <ArtworkZoneOverlay
+          key={target.zoneId}
+          zone={target.zone}
+          geometry={target.geometry}
+          position={target.position}
+          quaternion={target.quaternion}
+          scale={target.scale}
+          layers={layersByZone.get(target.zoneId) ?? NO_LAYERS}
+        />
+      ))}
+    </group>
   );
 }

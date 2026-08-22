@@ -1,15 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { CAMERA_PRESETS } from '@threadform/garment-runtime';
+import type { CameraPresetId, PrintZoneId } from '@threadform/types';
 import { useStudioProject } from '@/hooks/useStudioProject';
 import { useResolvedGarment } from '@/hooks/useResolvedGarment';
+import { useArtworkAssets } from '@/hooks/useArtworkAssets';
 import { StudioTopbar } from './StudioTopbar';
 import { ToolRail, STUDIO_TOOLS } from './ToolRail';
 import type { StudioTool } from './ToolRail';
 import { GarmentPicker } from './GarmentPicker';
 import { Inspector } from './Inspector';
+import { ArtworkPanel } from './ArtworkPanel';
 import { RecentProjects } from './RecentProjects';
 import { NoticeBanner } from './NoticeBanner';
 
@@ -25,9 +28,30 @@ const StudioGarmentCanvas = dynamic(
   },
 );
 
+/**
+ * Which camera preset shows a print zone head-on. Selecting a zone in the
+ * artwork panel turns the garment to face it — you cannot judge a back
+ * print while looking at the chest. This only moves the camera; it never
+ * touches artwork state, so switching between Front and Back leaves both
+ * placements exactly as they were.
+ */
+const ZONE_CAMERA_PRESET: Partial<Record<PrintZoneId, CameraPresetId>> = {
+  front: 'front',
+  'left-chest': 'front',
+  'right-chest': 'front',
+  pocket: 'front',
+  back: 'back',
+};
+
 export function StudioShell() {
   const [activeTool, setActiveTool] = useState<StudioTool>('garment');
   const [canvasFailed, setCanvasFailed] = useState(false);
+  const [activeZoneId, setActiveZoneId] = useState<PrintZoneId>('front');
+  const [selectedArtworkId, setSelectedArtworkId] = useState<string | null>(null);
+  // Mobile only: the Inspector sheet is collapsed by default so the garment
+  // gets the whole viewport, but picking a tool whose controls live inside
+  // it must open it - otherwise the tap looks like it did nothing.
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const {
     phase,
     project,
@@ -43,28 +67,81 @@ export function StudioShell() {
     renameProject,
     setGarmentColor,
     setCameraPreset,
+    addArtwork,
+    replaceArtwork,
+    removeArtwork,
+    updateArtworkTransform,
+    centerArtwork,
+    setArtworkOpacity,
     cameraResetToken,
   } = useStudioProject();
 
   const garment = useResolvedGarment(project);
+  const { assets, renderLayers, adoptDecodedArtwork } = useArtworkAssets(project);
   const hasProject = project !== null;
 
   function selectTool(tool: StudioTool) {
     const definition = STUDIO_TOOLS.find((t) => t.id === tool);
     if (definition?.requiresGarment && !hasProject) return;
     setActiveTool(tool);
+    if (tool !== 'garment') setInspectorOpen(true);
   }
 
   function handleChooseGarment(garmentId: string) {
     setActiveTool('garment');
+    setSelectedArtworkId(null);
+    setActiveZoneId('front');
     void chooseGarment(garmentId);
+  }
+
+  function handleOpenProject(id: string) {
+    setSelectedArtworkId(null);
+    setActiveZoneId('front');
+    void openExistingProject(id);
   }
 
   function handleNewProject() {
     startNewProject();
     setCanvasFailed(false);
     setActiveTool('garment');
+    setSelectedArtworkId(null);
+    setActiveZoneId('front');
   }
+
+  const handleSelectZone = useCallback(
+    (zoneId: PrintZoneId) => {
+      setActiveZoneId(zoneId);
+      setSelectedArtworkId(null);
+      const preset = ZONE_CAMERA_PRESET[zoneId];
+      if (preset && garment.manifest?.cameraPresets.includes(preset)) {
+        setCameraPreset(preset);
+      }
+    },
+    [garment.manifest, setCameraPreset],
+  );
+
+  // One element, rendered into both Inspector copies (desktop rail and
+  // mobile sheet). Each copy mounts its own instance, so their transient
+  // import/error state stays independent while both read the same Project.
+  const artworkPanel =
+    project && garment.manifest ? (
+      <ArtworkPanel
+        project={project}
+        manifest={garment.manifest}
+        assets={assets}
+        activeZoneId={activeZoneId}
+        onSelectZone={handleSelectZone}
+        selectedLayerId={selectedArtworkId}
+        onSelectLayer={setSelectedArtworkId}
+        onAddArtwork={addArtwork}
+        onReplaceArtwork={replaceArtwork}
+        onRemoveArtwork={removeArtwork}
+        onTransform={updateArtworkTransform}
+        onCenter={centerArtwork}
+        onOpacity={setArtworkOpacity}
+        onArtworkImported={adoptDecodedArtwork}
+      />
+    ) : null;
 
   const canvas = (
     <div className="bg-canvas relative flex flex-1 items-center justify-center overflow-hidden">
@@ -76,7 +153,7 @@ export function StudioShell() {
           <GarmentPicker onSelect={handleChooseGarment} disabled={isBusy} />
           <RecentProjects
             projects={recentProjects}
-            onOpen={(id) => void openExistingProject(id)}
+            onOpen={handleOpenProject}
             onDelete={(id) => void deleteExistingProject(id)}
           />
         </div>
@@ -129,6 +206,7 @@ export function StudioShell() {
                 className="h-full w-full"
                 manifest={garment.manifest}
                 colorHex={project.garmentColor.hex}
+                artworkLayers={renderLayers}
                 cameraPreset={CAMERA_PRESETS[project.camera.presetId] ?? CAMERA_PRESETS.front}
                 cameraResetToken={cameraResetToken}
                 errorFallback={
@@ -171,17 +249,22 @@ export function StudioShell() {
           manifest={garment.manifest}
           onColorChange={setGarmentColor}
           onCameraPreset={setCameraPreset}
+          artworkPanel={artworkPanel}
         />
       </div>
 
       {/* Mobile layout: canvas, collapsible inspector sheet, bottom tool bar */}
       <div className="flex min-h-0 flex-1 flex-col md:hidden">
         {canvas}
-        <details className="border-border bg-surface-raised border-t">
+        <details
+          className="border-border bg-surface-raised border-t"
+          open={inspectorOpen}
+          onToggle={(event) => setInspectorOpen(event.currentTarget.open)}
+        >
           <summary className="text-secondary cursor-pointer list-none px-4 py-2.5 text-sm font-medium">
             Inspector
           </summary>
-          <div className="max-h-64 overflow-y-auto">
+          <div className="max-h-72 overflow-y-auto">
             <Inspector
               activeTool={activeTool}
               project={project}
@@ -189,6 +272,7 @@ export function StudioShell() {
               manifest={garment.manifest}
               onColorChange={setGarmentColor}
               onCameraPreset={setCameraPreset}
+              artworkPanel={artworkPanel}
               showHeading={false}
             />
           </div>

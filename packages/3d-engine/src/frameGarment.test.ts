@@ -17,9 +17,9 @@ describe('frameGarment', () => {
     const result = frameGarment(bounds, frontPreset, 40, 1);
 
     const distance = result.position.distanceTo(result.target);
-    // sin(20deg) ≈ 0.342 → expected ≈ 1 / 0.342 * 1.15 ≈ 3.36
-    expect(distance).toBeGreaterThan(3.2);
-    expect(distance).toBeLessThan(3.5);
+    // sin(20deg) ≈ 0.342 → expected ≈ 1 / 0.342 * 1.06 ≈ 3.10
+    expect(distance).toBeGreaterThan(2.95);
+    expect(distance).toBeLessThan(3.25);
   });
 
   it('scales distance with the garment size, independent of absolute scale', () => {

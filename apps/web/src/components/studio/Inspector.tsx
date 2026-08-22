@@ -1,19 +1,11 @@
+import type { ReactNode } from 'react';
 import type { CameraPresetId, Project } from '@threadform/types';
 import { CAMERA_PRESETS } from '@threadform/garment-runtime';
 import type { GarmentManifest } from '@threadform/garment-runtime';
 import { Panel } from '@threadform/ui';
+import { CheckIcon, PlusIcon, ResetViewIcon } from './icons';
 import type { StudioTool } from './ToolRail';
 import type { ResolvedGarmentStatus } from '@/hooks/useResolvedGarment';
-
-const PLACEHOLDER_COPY: Record<StudioTool, string> = {
-  garment: 'Garment color, material shortcuts and print-zone toggles will live here.',
-  artwork: 'Layer list, transform controls and print-zone assignment will live here.',
-  material: 'Fabric presets and surface property sliders will live here.',
-  effects: 'The effect stack for the selected artwork layer will live here.',
-  scene: 'Camera presets, orbit controls and the three-point lighting rig will live here.',
-  animation: 'Animation preset, duration and playback controls will live here.',
-  export: 'Format, resolution, frame rate and aspect-ratio controls will live here.',
-};
 
 const COLOR_PRESETS: Array<{ hex: string; label: string }> = [
   { hex: '#f5f5f0', label: 'Natural' },
@@ -24,6 +16,11 @@ const COLOR_PRESETS: Array<{ hex: string; label: string }> = [
   { hex: '#6b7d63', label: 'Sage' },
 ];
 
+function colorLabel(hex: string): string {
+  const preset = COLOR_PRESETS.find((c) => c.hex.toLowerCase() === hex.toLowerCase());
+  return preset?.label ?? hex.toUpperCase();
+}
+
 export interface InspectorProps {
   activeTool: StudioTool;
   project: Project | null;
@@ -31,6 +28,14 @@ export interface InspectorProps {
   manifest: GarmentManifest | null;
   onColorChange: (hex: string) => void;
   onCameraPreset: (presetId: CameraPresetId) => void;
+  /**
+   * The artwork tool's panel, supplied by `StudioShell` rather than built
+   * here: the Inspector is rendered twice (a desktop rail and a mobile
+   * sheet), and artwork import/placement needs its own local state per
+   * copy — which is exactly what passing an element rather than a prop bag
+   * gives, two independent instances behind one prop.
+   */
+  artworkPanel?: ReactNode;
   /** False when an ancestor (the mobile `<details><summary>Inspector</summary>`) already labels this panel — avoids a duplicate "Inspector" heading once expanded. */
   showHeading?: boolean;
 }
@@ -42,31 +47,38 @@ export function Inspector({
   manifest,
   onColorChange,
   onCameraPreset,
+  artworkPanel,
   showHeading = true,
 }: InspectorProps) {
+  const hasCustomColor =
+    !!project &&
+    !COLOR_PRESETS.some((c) => c.hex.toLowerCase() === project.garmentColor.hex.toLowerCase());
+
   return (
     <Panel
       raised
-      className="flex h-full w-full flex-col gap-4 overflow-y-auto p-4 md:w-80 md:shrink-0 md:rounded-none md:border-y-0 md:border-r-0"
+      className="flex h-full w-full flex-col gap-5 overflow-y-auto p-4 md:w-72 md:shrink-0 md:rounded-none md:border-y-0 md:border-r-0"
     >
       {showHeading && <h2 className="text-primary text-sm font-medium">Inspector</h2>}
 
       {activeTool === 'garment' && manifest && project && (
-        <div className="flex flex-col gap-3">
-          <p className="border-border bg-surface text-secondary rounded-md border px-3 py-2 text-sm">
-            Selected garment: <span className="text-primary">{manifest.name}</span>
+        <div className="flex flex-col gap-4">
+          <div>
+            <h3 className="text-tertiary text-xs font-medium uppercase tracking-wide">Garment</h3>
+            <p className="text-primary mt-1.5 text-sm">{manifest.name}</p>
             {garmentStatus === 'legacy-compatible' && (
-              <span className="text-tertiary block text-xs">
+              <p className="text-tertiary mt-0.5 text-xs">
                 Matched from an earlier project format.
-              </span>
+              </p>
             )}
-          </p>
+          </div>
 
           <div>
-            <h3 className="text-secondary text-xs font-medium uppercase tracking-wide">
-              Garment color
-            </h3>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="flex items-baseline justify-between">
+              <h3 className="text-tertiary text-xs font-medium uppercase tracking-wide">Color</h3>
+              <span className="text-tertiary text-xs">{colorLabel(project.garmentColor.hex)}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2.5">
               {COLOR_PRESETS.map((preset) => {
                 const active = project.garmentColor.hex.toLowerCase() === preset.hex.toLowerCase();
                 return (
@@ -78,22 +90,45 @@ export function Inspector({
                     aria-pressed={active}
                     title={preset.label}
                     style={{ backgroundColor: preset.hex }}
-                    className={`focus-visible:ring-accent-strong focus-visible:ring-offset-surface-raised h-9 w-9 rounded-full border transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+                    className={`focus-visible:ring-accent-strong focus-visible:ring-offset-surface-raised relative flex h-9 w-9 items-center justify-center rounded-full border transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
                       active
                         ? 'border-accent-strong ring-accent-strong ring-2'
-                        : 'border-border-strong'
+                        : 'border-border-strong hover:border-accent'
                     }`}
-                  />
+                  >
+                    {active && (
+                      <CheckIcon
+                        className="h-3.5 w-3.5 drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]"
+                        style={{ color: isLight(preset.hex) ? '#141416' : '#f2f1ee' }}
+                      />
+                    )}
+                  </button>
                 );
               })}
-              <label className="text-tertiary flex items-center gap-1.5 text-xs">
+              <label
+                className={`focus-within:ring-accent-strong focus-within:ring-offset-surface-raised relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border transition-shadow focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 ${
+                  hasCustomColor
+                    ? 'border-accent-strong ring-accent-strong ring-2'
+                    : 'border-border-strong hover:border-accent'
+                }`}
+                style={hasCustomColor ? { backgroundColor: project.garmentColor.hex } : undefined}
+                title="Custom color"
+              >
                 <span className="sr-only">Custom garment color</span>
                 <input
                   type="color"
                   value={project.garmentColor.hex}
                   onChange={(event) => onColorChange(event.target.value)}
                   aria-label="Custom garment color"
-                  className="border-border-strong h-9 w-9 cursor-pointer rounded-full border bg-transparent p-0"
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+                <PlusIcon
+                  aria-hidden="true"
+                  className="pointer-events-none h-4 w-4"
+                  style={{
+                    color:
+                      hasCustomColor && !isLight(project.garmentColor.hex) ? '#f2f1ee' : undefined,
+                  }}
                 />
               </label>
             </div>
@@ -101,45 +136,65 @@ export function Inspector({
         </div>
       )}
 
-      {activeTool === 'scene' && manifest && (
-        <div>
-          <h3 className="text-secondary text-xs font-medium uppercase tracking-wide">Camera</h3>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {manifest.cameraPresets.map((presetId) => {
-              const preset = CAMERA_PRESETS[presetId];
-              const active = project?.camera.presetId === presetId;
-              return (
-                <button
-                  key={presetId}
-                  type="button"
-                  onClick={() => onCameraPreset(presetId)}
-                  aria-pressed={active}
-                  className={`focus-visible:ring-accent-strong min-h-9 rounded-md border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
-                    active
-                      ? 'border-accent bg-accent-muted text-primary'
-                      : 'border-border bg-surface text-secondary hover:border-border-strong hover:text-primary'
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
+      {activeTool === 'artwork' && manifest && project && artworkPanel}
+
+      {activeTool === 'view' && manifest && project && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h3 className="text-tertiary text-xs font-medium uppercase tracking-wide">Camera</h3>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {manifest.cameraPresets.map((presetId) => {
+                const preset = CAMERA_PRESETS[presetId];
+                const active = project.camera.presetId === presetId;
+                return (
+                  <button
+                    key={presetId}
+                    type="button"
+                    onClick={() => onCameraPreset(presetId)}
+                    aria-pressed={active}
+                    className={`focus-visible:ring-accent-strong min-h-9 rounded-md border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+                      active
+                        ? 'border-accent bg-accent-muted text-primary'
+                        : 'border-border bg-surface text-secondary hover:border-border-strong hover:text-primary'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <p className="text-tertiary mt-3 text-xs leading-relaxed">
-            Drag to orbit, scroll or pinch to zoom. Full lighting/background editing arrives later.
+
+          <button
+            type="button"
+            onClick={() => onCameraPreset(project.camera.presetId)}
+            className="border-border bg-surface text-secondary hover:border-border-strong hover:text-primary focus-visible:ring-accent-strong flex min-h-9 items-center gap-2 self-start rounded-md border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+          >
+            <ResetViewIcon className="h-4 w-4" />
+            Reset view
+          </button>
+
+          <p className="text-tertiary text-xs leading-relaxed">
+            Drag to orbit, scroll or pinch to zoom.
           </p>
         </div>
       )}
-
-      {!(activeTool === 'garment' && manifest) && !(activeTool === 'scene' && manifest) && (
-        <p className="text-tertiary text-sm leading-relaxed">{PLACEHOLDER_COPY[activeTool]}</p>
-      )}
-
-      <p className="text-tertiary mt-auto text-xs">
-        {manifest
-          ? 'Artwork, materials and effects controls establish layout only — not wired up yet.'
-          : 'This panel establishes layout only — it is not wired to a garment engine yet.'}
-      </p>
     </Panel>
   );
+}
+
+function isLight(hex: string): boolean {
+  const value = hex.replace('#', '');
+  const full =
+    value.length === 3
+      ? value
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : value;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6;
 }

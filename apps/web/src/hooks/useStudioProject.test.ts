@@ -82,7 +82,7 @@ describe('useStudioProject — chooseGarment', () => {
     });
 
     expect(mocked.createAndPersistProject).toHaveBeenCalledWith(
-      { garmentId: 'threadform-essential-tee', garmentVersion: '1.0.0', category: 't-shirt' },
+      { garmentId: 'threadform-essential-tee', garmentVersion: '1.1.0', category: 't-shirt' },
       { name: 'ThreadForm Essential Tee Project', garmentColor: { hex: '#f5f5f0' } },
     );
     expect(result.current.phase).toBe('editing');

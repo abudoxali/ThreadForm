@@ -43,15 +43,15 @@ test('garment project lifecycle: create, render, recolor, camera, persist, recen
     await page.goto('/studio');
     await expect(page.getByRole('heading', { name: /choose a garment/i }).first()).toBeVisible();
 
-    const artworkTool = page.getByRole('button', { name: 'Artwork' }).first();
-    await expect(artworkTool).toHaveAttribute('aria-disabled', 'true');
+    const viewTool = page.getByRole('button', { name: 'View' }).first();
+    await expect(viewTool).toHaveAttribute('aria-disabled', 'true');
 
     await page.getByRole('button', { name: 'ThreadForm Essential Tee' }).first().click();
 
     await expect(page.getByRole('textbox', { name: /project name/i })).toHaveValue(
       'ThreadForm Essential Tee Project',
     );
-    await expect(artworkTool).toHaveAttribute('aria-disabled', 'false');
+    await expect(viewTool).toHaveAttribute('aria-disabled', 'false');
 
     // Real WebGL canvas, real garment mesh — not a placeholder message.
     const canvas = page.locator('canvas:visible').first();
@@ -85,7 +85,7 @@ test('garment project lifecycle: create, render, recolor, camera, persist, recen
   });
 
   await test.step('FLOW 3 — camera: orbit drag and preset buttons keep the canvas operational', async () => {
-    await page.getByRole('button', { name: 'Camera & light' }).first().click();
+    await page.getByRole('button', { name: 'View' }).first().click();
 
     const canvas = page.locator('canvas:visible').first();
     const box = await canvas.boundingBox();
@@ -154,7 +154,10 @@ test('legacy M01 project reference resolves to the real garment', async ({ page 
 
   await page.evaluate(() => {
     return new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open('threadform', 1);
+      // Opened without a version so this keeps working as the schema is
+      // upgraded (M03 added the artwork store at v2) - naming an older
+      // version than the app already created would fail outright.
+      const request = indexedDB.open('threadform');
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         const db = request.result;
@@ -246,8 +249,8 @@ test('mobile: garment renders full-viewport with no overflow and accessible cont
 
   // The bottom tool bar (mobile layout) must still be reachable.
   await expect(page.getByRole('navigation', { name: 'Studio tools' }).last()).toBeVisible();
-  const artworkTool = page.getByRole('button', { name: 'Artwork' }).last();
-  await expect(artworkTool).toHaveAttribute('aria-disabled', 'false');
+  const viewTool = page.getByRole('button', { name: 'View' }).last();
+  await expect(viewTool).toHaveAttribute('aria-disabled', 'false');
 
   expect(consoleErrors, `unexpected console errors: ${consoleErrors.join('; ')}`).toEqual([]);
 });

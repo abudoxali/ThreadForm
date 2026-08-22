@@ -18,8 +18,22 @@ function validManifestPayload(overrides: Record<string, unknown> = {}) {
     },
     defaultColor: '#f5f5f0',
     printZones: [
-      { id: 'front', label: 'Front', maxWidth: 0.8, maxHeight: 0.9 },
-      { id: 'back', label: 'Back', maxWidth: 0.8, maxHeight: 0.9 },
+      {
+        id: 'front',
+        label: 'Front',
+        maxWidth: 0.8,
+        maxHeight: 0.9,
+        uvRect: { x: 0.17, y: 0.4, width: 0.16, height: 0.42 },
+        aspectRatio: 1,
+      },
+      {
+        id: 'back',
+        label: 'Back',
+        maxWidth: 0.8,
+        maxHeight: 0.9,
+        uvRect: { x: 0.67, y: 0.4, width: 0.16, height: 0.42 },
+        aspectRatio: 1,
+      },
     ],
     supportedMaterials: ['cotton'],
     supportedEffects: ['screen-print'],
@@ -87,6 +101,57 @@ describe('loadManifest', () => {
 
   it('rejects a manifest with no print zones', async () => {
     mockFetchOnce(validManifestPayload({ printZones: [] }));
+    const result = await loadManifest('threadform-essential-tee');
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a print zone with no UV rectangle', async () => {
+    mockFetchOnce(
+      validManifestPayload({
+        printZones: [{ id: 'front', label: 'Front', maxWidth: 0.8, maxHeight: 0.9 }],
+      }),
+    );
+    const result = await loadManifest('threadform-essential-tee');
+    expect(result.success).toBe(false);
+  });
+
+  // A rectangle running off the edge of UV space would sample whatever the
+  // texture's wrap mode returned there instead of the region the garment
+  // author meant — silently misplacing every print in that zone.
+  it('rejects a UV rectangle that does not fit inside the 0-1 square', async () => {
+    mockFetchOnce(
+      validManifestPayload({
+        printZones: [
+          {
+            id: 'front',
+            label: 'Front',
+            maxWidth: 0.8,
+            maxHeight: 0.9,
+            uvRect: { x: 0.9, y: 0.4, width: 0.3, height: 0.42 },
+            aspectRatio: 1,
+          },
+        ],
+      }),
+    );
+    const result = await loadManifest('threadform-essential-tee');
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a non-positive zone aspect ratio', async () => {
+    mockFetchOnce(
+      validManifestPayload({
+        printZones: [
+          {
+            id: 'front',
+            label: 'Front',
+            maxWidth: 0.8,
+            maxHeight: 0.9,
+            uvRect: { x: 0.1, y: 0.4, width: 0.16, height: 0.42 },
+            aspectRatio: 0,
+          },
+        ],
+      }),
+    );
     const result = await loadManifest('threadform-essential-tee');
     expect(result.success).toBe(false);
   });

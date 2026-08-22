@@ -9,6 +9,8 @@ export interface GarmentBounds {
 export interface FramedCamera {
   position: THREE.Vector3;
   target: THREE.Vector3;
+  /** How far from `target` the garment fits the current canvas. Exposed so a resize can re-fit distance without disturbing the orbit angle. */
+  distance: number;
   minDistance: number;
   maxDistance: number;
 }
@@ -37,7 +39,12 @@ export function frameGarment(
   const verticalHalfFovRadians = THREE.MathUtils.degToRad(verticalFovDegrees) / 2;
   const horizontalHalfFovRadians = Math.atan(Math.tan(verticalHalfFovRadians) * aspect);
   const constrainingHalfFovRadians = Math.min(verticalHalfFovRadians, horizontalHalfFovRadians);
-  const fitMargin = 1.15;
+  // A tight-but-safe margin around the bounding sphere — the garment should
+  // read as the hero of the canvas, not a small object adrift in it. 1.15
+  // (M02) left a very generous gap on every side; 1.06 still guarantees no
+  // clipping (the sphere itself is a conservative bound — see frameGarment.test.ts)
+  // while making far better use of the available canvas.
+  const fitMargin = 1.06;
   const distance = (bounds.radius / Math.sin(constrainingHalfFovRadians)) * fitMargin;
 
   const azimuth = THREE.MathUtils.degToRad(preset.azimuthDegrees);
@@ -49,6 +56,7 @@ export function frameGarment(
   return {
     position: bounds.center.clone().add(offset),
     target: bounds.center.clone(),
+    distance,
     minDistance: Math.max(bounds.radius * 1.3, 0.1),
     // Must never be less than `distance` itself — OrbitControls.update()
     // clamps the camera to this radius, which would silently undo the

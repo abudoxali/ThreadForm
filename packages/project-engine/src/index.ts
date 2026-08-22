@@ -7,6 +7,24 @@ export {
   reorderArtworkLayer,
   centerArtworkLayer,
 } from './layers';
+export {
+  MIN_ARTWORK_SCALE,
+  DEFAULT_ARTWORK_ZONE_COVERAGE,
+  normalizeRotationDegrees,
+  artworkHeightFraction,
+  fitArtworkScale,
+  rotatedHalfExtent,
+  clampArtworkTransform,
+  defaultArtworkTransform,
+  setArtworkTransform,
+  setArtworkOpacity,
+  setArtworkVisibility,
+  renameArtworkLayer,
+  moveArtworkLayerToZone,
+  replaceArtworkSource,
+  artworkLayersInZone,
+} from './artwork';
+export type { ArtworkTransformPatch } from './artwork';
 export { setGarmentColor, setCameraPreset } from './garment';
 export { validateProject } from './validate';
 export type { ProjectValidationResult } from './validate';

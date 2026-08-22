@@ -38,12 +38,19 @@ const hexColorSchema = z
   )
   .transform((value) => value as HexColor);
 
-const vector2Schema = z.object({ x: z.number(), y: z.number() });
-const vector3Schema = z.object({ x: z.number(), y: z.number(), z: z.number() });
+// `.finite()` matters more than it looks: `z.number()` alone accepts
+// `Infinity`, and an infinite scale or position reaches the renderer as a
+// NaN transform matrix that silently blanks the whole canvas.
+const vector2Schema = z.object({ x: z.number().finite(), y: z.number().finite() });
+const vector3Schema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  z: z.number().finite(),
+});
 
 const transform2DSchema = z.object({
   position: vector2Schema,
-  rotationDegrees: z.number(),
+  rotationDegrees: z.number().finite(),
   scale: vector2Schema,
 });
 
@@ -127,16 +134,30 @@ const ARTWORK_FILE_KINDS = [
   'svg',
 ] as const satisfies readonly ArtworkFileKind[];
 
+/**
+ * Recorded at import time by `@threadform/artwork-engine`. Bounded here as
+ * well as there: these numbers come back out of storage, where they are as
+ * untrusted as any other persisted field, and the renderer divides by them
+ * when it aspect-corrects a layer.
+ */
+const artworkPixelFields = {
+  pixelWidth: z.number().int().positive().max(65535),
+  pixelHeight: z.number().int().positive().max(65535),
+  byteSize: z.number().int().nonnegative(),
+};
+
 const artworkSourceSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('local-blob'),
     blobId: z.string().min(1),
     fileKind: z.enum(ARTWORK_FILE_KINDS),
+    ...artworkPixelFields,
   }),
   z.object({
     kind: z.literal('remote'),
     url: z.string().url(),
     fileKind: z.enum(ARTWORK_FILE_KINDS),
+    ...artworkPixelFields,
   }),
 ]);
 
@@ -152,6 +173,15 @@ const artworkLayerSchema = z.object({
   lockAspectRatio: z.boolean(),
   order: z.number(),
 });
+
+/**
+ * `transform2DSchema` deliberately accepts any finite numbers rather than
+ * re-encoding the placement limits: those limits belong to the *garment's*
+ * print zone, which this schema cannot see. A stored transform is brought
+ * back into range by `clampArtworkTransform` at the point of use, where the
+ * zone definition is available, rather than causing a whole project to fail
+ * validation because a manifest tightened a limit after it was saved.
+ */
 
 const EFFECT_KINDS = [
   'normal-print',

@@ -80,9 +80,9 @@ describe('StudioPage — creating and persisting a project', () => {
     render(<StudioPage />);
     await waitForInitialLoad();
 
-    const [artworkButton] = screen.getAllByRole('button', { name: 'Artwork' });
-    if (!artworkButton) throw new Error('expected an Artwork tool button');
-    expect(artworkButton).toHaveAttribute('aria-disabled', 'true');
+    const [viewButton] = screen.getAllByRole('button', { name: 'View' });
+    if (!viewButton) throw new Error('expected a View tool button');
+    expect(viewButton).toHaveAttribute('aria-disabled', 'true');
 
     await chooseEssentialTee();
 
@@ -91,7 +91,7 @@ describe('StudioPage — creating and persisting a project', () => {
         'ThreadForm Essential Tee Project',
       );
     });
-    expect(artworkButton).toHaveAttribute('aria-disabled', 'false');
+    expect(viewButton).toHaveAttribute('aria-disabled', 'false');
     expect(screen.getAllByTestId('garment-canvas-stub')[0]).toHaveTextContent(
       'Rendering ThreadForm Essential Tee',
     );

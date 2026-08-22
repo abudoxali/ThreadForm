@@ -20,7 +20,14 @@ function stubLayer(
 ): Omit<ArtworkLayer, 'id' | 'order'> {
   return {
     name: 'Logo',
-    source: { kind: 'local-blob', blobId: 'blob_1', fileKind: 'png' },
+    source: {
+      kind: 'local-blob',
+      blobId: 'blob_1',
+      fileKind: 'png',
+      pixelWidth: 512,
+      pixelHeight: 512,
+      byteSize: 4096,
+    },
     printZoneId,
     transform: { position: { x: 0.5, y: 0.5 }, rotationDegrees: 0, scale: { x: 1, y: 1 } },
     opacity: 1,

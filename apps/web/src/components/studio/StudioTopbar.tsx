@@ -21,7 +21,7 @@ export function StudioTopbar({ project, saveStatus, onRename, onNewProject }: St
   const statusLabel = SAVE_STATUS_LABEL[saveStatus];
 
   return (
-    <header className="border-border bg-surface flex h-14 shrink-0 items-center justify-between border-b px-3 sm:px-4">
+    <header className="border-border bg-surface flex h-12 shrink-0 items-center justify-between border-b px-3 sm:px-4">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <Link href="/" className="text-primary shrink-0 text-sm font-semibold tracking-wide">
           ThreadForm
@@ -39,7 +39,7 @@ export function StudioTopbar({ project, saveStatus, onRename, onNewProject }: St
             {statusLabel && (
               <span
                 role="status"
-                className={`hidden shrink-0 text-xs sm:inline ${saveStatus === 'error' ? 'text-danger' : 'text-tertiary'}`}
+                className={`shrink-0 text-xs ${saveStatus === 'error' ? 'text-danger' : 'text-tertiary'}`}
               >
                 {statusLabel}
               </span>
@@ -57,25 +57,6 @@ export function StudioTopbar({ project, saveStatus, onRename, onNewProject }: St
             New Project
           </button>
         )}
-        {/* Inert placeholders — hidden below `sm` so the one real action (New Project) always has room. */}
-        <div className="hidden shrink-0 items-center gap-2 sm:flex">
-          <button
-            type="button"
-            aria-disabled="true"
-            title="Available once a garment is loaded"
-            className={buttonStyles('secondary', 'sm', 'cursor-not-allowed opacity-40')}
-          >
-            Export
-          </button>
-          <button
-            type="button"
-            aria-disabled="true"
-            title="Accounts are not part of this milestone yet"
-            className={buttonStyles('ghost', 'sm', 'cursor-not-allowed opacity-40')}
-          >
-            Sign in
-          </button>
-        </div>
       </div>
     </header>
   );

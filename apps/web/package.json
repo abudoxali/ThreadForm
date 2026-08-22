@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@threadform/3d-engine": "workspace:*",
+    "@threadform/artwork-engine": "workspace:*",
     "@threadform/garment-runtime": "workspace:*",
     "@threadform/local-storage": "workspace:*",
     "@threadform/project-engine": "workspace:*",

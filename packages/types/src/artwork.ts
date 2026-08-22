@@ -8,10 +8,31 @@ export type ArtworkFileKind = 'png' | 'jpeg' | 'webp' | 'svg';
  * a blob persisted through `@threadform/local-storage`; the id is a stable
  * key, never a raw object URL (those are session-scoped and cannot survive
  * reload). `remote` is reserved for the future cloud-projects feature.
+ *
+ * `pixelWidth`/`pixelHeight`/`byteSize` are recorded at import time so the
+ * Studio can lay out, describe and aspect-correct a layer before (or
+ * without) decoding its bytes again — and so a reload can restore a
+ * visually identical placement even while the image is still loading.
+ * `fileKind` is what the file's *actual signature* said at import, never
+ * its declared MIME type or extension (see `@threadform/artwork-engine`).
  */
 export type ArtworkSource =
-  | { kind: 'local-blob'; blobId: string; fileKind: ArtworkFileKind }
-  | { kind: 'remote'; url: string; fileKind: ArtworkFileKind };
+  | {
+      kind: 'local-blob';
+      blobId: string;
+      fileKind: ArtworkFileKind;
+      pixelWidth: number;
+      pixelHeight: number;
+      byteSize: number;
+    }
+  | {
+      kind: 'remote';
+      url: string;
+      fileKind: ArtworkFileKind;
+      pixelWidth: number;
+      pixelHeight: number;
+      byteSize: number;
+    };
 
 export interface ArtworkLayer {
   id: string;

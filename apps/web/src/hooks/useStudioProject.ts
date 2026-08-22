@@ -1,16 +1,29 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CameraPresetId, Project } from '@threadform/types';
+import type { CameraPresetId, PrintZoneDefinition, Project } from '@threadform/types';
 import type { ProjectSummary } from '@threadform/local-storage';
 import { loadManifest, getCameraPreset } from '@threadform/garment-runtime';
+import { artworkNameFromFileName } from '@threadform/artwork-engine';
+import type { DecodedArtwork } from '@threadform/artwork-engine';
 import {
+  addArtworkLayer,
+  centerArtworkLayer,
+  defaultArtworkTransform,
+  moveArtworkLayerToZone,
+  removeArtworkLayer,
+  replaceArtworkSource,
+  setArtworkOpacity as applyArtworkOpacity,
+  setArtworkTransform as applyArtworkTransform,
   setGarmentColor as applyGarmentColor,
   setCameraPreset as applyCameraPreset,
 } from '@threadform/project-engine';
+import type { ArtworkTransformPatch } from '@threadform/project-engine';
 import {
   createAndPersistProject,
   deleteProjectById,
+  discardArtworkBlob,
+  importArtworkForProject,
   listRecentProjects,
   openProject,
   restoreLastOpenedProject,
@@ -19,6 +32,17 @@ import {
 
 export type StudioPhase = 'initializing' | 'start' | 'editing';
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+/**
+ * The outcome of an artwork import. Success carries the already-decoded
+ * image so the caller can hand it to `useArtworkAssets` and have the print
+ * appear immediately; failure carries copy written for the user, which the
+ * artwork panel shows beside the control they used rather than in the
+ * Studio-wide notice banner.
+ */
+export type ArtworkMutationResult =
+  | { ok: true; layerId: string; blobId: string; decoded: DecodedArtwork }
+  | { ok: false; error: string };
 
 const AUTOSAVE_DEBOUNCE_MS = 600;
 
@@ -39,6 +63,28 @@ export interface UseStudioProjectResult {
   renameProject: (name: string) => void;
   setGarmentColor: (hex: string) => void;
   setCameraPreset: (presetId: CameraPresetId) => void;
+  /**
+   * Imports a file as a new artwork layer in `zone`. The zone definition
+   * comes from the garment's manifest and is passed in rather than looked
+   * up here, so the placement limits applied are always the ones the
+   * *resolved* garment declares — this hook deliberately doesn't resolve
+   * manifests for the open project (`useResolvedGarment` does).
+   */
+  addArtwork: (file: File, zone: PrintZoneDefinition) => Promise<ArtworkMutationResult>;
+  replaceArtwork: (
+    layerId: string,
+    file: File,
+    zone: PrintZoneDefinition,
+  ) => Promise<ArtworkMutationResult>;
+  removeArtwork: (layerId: string) => void;
+  updateArtworkTransform: (
+    layerId: string,
+    patch: ArtworkTransformPatch,
+    zone: PrintZoneDefinition,
+  ) => void;
+  centerArtwork: (layerId: string) => void;
+  moveArtworkToZone: (layerId: string, zone: PrintZoneDefinition) => void;
+  setArtworkOpacity: (layerId: string, opacity: number) => void;
   /** Bumped on every `setCameraPreset` call, including a re-selection of the already-active preset — lets the 3D canvas treat that as an explicit "reset view" rather than a no-op. */
   cameraResetToken: number;
 }
@@ -186,17 +232,25 @@ export function useStudioProject(): UseStudioProjectResult {
     };
   }, [flushPendingSave]);
 
+  /**
+   * Applies a `project-engine` mutator and schedules the autosave. Returns
+   * the resulting project so callers that need to inspect what the mutator
+   * produced — an artwork import needs the id of the layer that was just
+   * created — can do so without re-reading state that React hasn't
+   * committed yet. `null` means there was no open project to mutate.
+   */
   const updateProject = useCallback(
-    (mutator: (current: Project) => Project) => {
+    (mutator: (current: Project) => Project): Project | null => {
       const current = projectRef.current;
-      if (!current) return;
+      if (!current) return null;
       const next = mutator(current);
       // project-engine mutators (e.g. `setGarmentColor` on an invalid hex)
       // return the same reference as a no-op — skip the render/save entirely
       // rather than scheduling a redundant identical write.
-      if (next === current) return;
+      if (next === current) return current;
       setProjectState(next);
       scheduleSave(next);
+      return next;
     },
     [scheduleSave, setProjectState],
   );
@@ -328,6 +382,123 @@ export function useStudioProject(): UseStudioProjectResult {
     [updateProject],
   );
 
+  /**
+   * Deletes an artwork blob once the project no longer references it.
+   * Blobs are shared by `blobId`, so a duplicated layer means two layers
+   * pointing at one file — removing either must not delete the bytes the
+   * other still needs.
+   */
+  const discardUnreferencedBlob = useCallback((blobId: string, project: Project | null) => {
+    const stillReferenced = (project?.artworks ?? []).some(
+      (layer) => layer.source.kind === 'local-blob' && layer.source.blobId === blobId,
+    );
+    if (!stillReferenced) void discardArtworkBlob(blobId);
+  }, []);
+
+  const addArtwork = useCallback(
+    async (file: File, zone: PrintZoneDefinition): Promise<ArtworkMutationResult> => {
+      const imported = await importArtworkForProject(file);
+      if (!imported.ok) return imported;
+      const { source, decoded } = imported.artwork;
+
+      const before = new Set((projectRef.current?.artworks ?? []).map((layer) => layer.id));
+      const next = updateProject((current) =>
+        addArtworkLayer(current, {
+          name: artworkNameFromFileName(file.name),
+          source,
+          printZoneId: zone.id,
+          transform: defaultArtworkTransform(source, zone),
+          opacity: 1,
+          visible: true,
+          locked: false,
+          lockAspectRatio: true,
+        }),
+      );
+
+      const created = next?.artworks.find((layer) => !before.has(layer.id));
+      if (!created) {
+        // The project was closed while the file was being read. Nothing
+        // references the blob that was just written, so undo the write
+        // rather than leaving it stranded in the user's storage.
+        decoded.release();
+        void discardArtworkBlob(source.blobId);
+        return { ok: false, error: 'That project was closed before the artwork finished loading.' };
+      }
+
+      return { ok: true, layerId: created.id, blobId: source.blobId, decoded };
+    },
+    [updateProject],
+  );
+
+  const replaceArtwork = useCallback(
+    async (
+      layerId: string,
+      file: File,
+      zone: PrintZoneDefinition,
+    ): Promise<ArtworkMutationResult> => {
+      const existing = projectRef.current?.artworks.find((layer) => layer.id === layerId);
+      if (!existing) return { ok: false, error: 'That artwork layer no longer exists.' };
+
+      const imported = await importArtworkForProject(file);
+      if (!imported.ok) return imported;
+      const { source, decoded } = imported.artwork;
+
+      const next = updateProject((current) =>
+        replaceArtworkSource(current, layerId, source, zone, artworkNameFromFileName(file.name)),
+      );
+      if (!next || !next.artworks.some((layer) => layer.id === layerId)) {
+        decoded.release();
+        void discardArtworkBlob(source.blobId);
+        return { ok: false, error: 'That artwork layer no longer exists.' };
+      }
+
+      if (existing.source.kind === 'local-blob') {
+        discardUnreferencedBlob(existing.source.blobId, next);
+      }
+      return { ok: true, layerId, blobId: source.blobId, decoded };
+    },
+    [discardUnreferencedBlob, updateProject],
+  );
+
+  const removeArtwork = useCallback(
+    (layerId: string) => {
+      const existing = projectRef.current?.artworks.find((layer) => layer.id === layerId);
+      const next = updateProject((current) => removeArtworkLayer(current, layerId));
+      if (existing?.source.kind === 'local-blob') {
+        discardUnreferencedBlob(existing.source.blobId, next);
+      }
+    },
+    [discardUnreferencedBlob, updateProject],
+  );
+
+  const updateArtworkTransform = useCallback(
+    (layerId: string, patch: ArtworkTransformPatch, zone: PrintZoneDefinition) => {
+      updateProject((current) => applyArtworkTransform(current, layerId, patch, zone));
+    },
+    [updateProject],
+  );
+
+  const centerArtwork = useCallback(
+    (layerId: string) => {
+      updateProject((current) => centerArtworkLayer(current, layerId));
+    },
+    [updateProject],
+  );
+
+  const moveArtworkToZone = useCallback(
+    (layerId: string, zone: PrintZoneDefinition) => {
+      updateProject((current) => moveArtworkLayerToZone(current, layerId, zone));
+    },
+    [updateProject],
+  );
+
+  const setArtworkOpacity = useCallback(
+    (layerId: string, opacity: number) => {
+      updateProject((current) => applyArtworkOpacity(current, layerId, opacity));
+    },
+    [updateProject],
+  );
+
   const dismissNotice = useCallback(() => setNotice(null), []);
 
   return {
@@ -345,6 +516,13 @@ export function useStudioProject(): UseStudioProjectResult {
     renameProject,
     setGarmentColor,
     setCameraPreset,
+    addArtwork,
+    replaceArtwork,
+    removeArtwork,
+    updateArtworkTransform,
+    centerArtwork,
+    moveArtworkToZone,
+    setArtworkOpacity,
     cameraResetToken,
   };
 }

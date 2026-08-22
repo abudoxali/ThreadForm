@@ -1,17 +1,14 @@
 import { IconButton } from '@threadform/ui';
-import {
-  AnimationIcon,
-  ArtworkIcon,
-  EffectsIcon,
-  ExportIcon,
-  GarmentIcon,
-  MaterialIcon,
-  SceneIcon,
-} from './icons';
+import { ArtworkIcon, GarmentIcon, ViewIcon } from './icons';
 
-export type StudioTool =
-  'garment' | 'artwork' | 'material' | 'effects' | 'scene' | 'animation' | 'export';
+export type StudioTool = 'garment' | 'artwork' | 'view';
 
+// Only tools with real, wired-up functionality appear here — see
+// docs/DESIGN_SYSTEM.md and CLAUDE.md's "No fake implementations": a tool
+// that opens onto placeholder copy is prototype residue, not a preview of
+// a future milestone. Artwork joined the rail in M03, when it gained a real
+// import/placement/render path; material, effects, animation and export
+// return when each has something real behind it too.
 export const STUDIO_TOOLS: Array<{
   id: StudioTool;
   label: string;
@@ -20,11 +17,7 @@ export const STUDIO_TOOLS: Array<{
 }> = [
   { id: 'garment', label: 'Garment', icon: GarmentIcon, requiresGarment: false },
   { id: 'artwork', label: 'Artwork', icon: ArtworkIcon, requiresGarment: true },
-  { id: 'material', label: 'Material', icon: MaterialIcon, requiresGarment: true },
-  { id: 'effects', label: 'Effects', icon: EffectsIcon, requiresGarment: true },
-  { id: 'scene', label: 'Camera & light', icon: SceneIcon, requiresGarment: true },
-  { id: 'animation', label: 'Animation', icon: AnimationIcon, requiresGarment: true },
-  { id: 'export', label: 'Export', icon: ExportIcon, requiresGarment: true },
+  { id: 'view', label: 'View', icon: ViewIcon, requiresGarment: true },
 ];
 
 export interface ToolRailProps {
@@ -45,8 +38,8 @@ export function ToolRail({
       aria-label="Studio tools"
       className={
         orientation === 'vertical'
-          ? 'border-border bg-surface flex w-16 shrink-0 flex-col items-center gap-1 border-r py-3'
-          : 'border-border bg-surface flex items-center gap-1 overflow-x-auto border-t px-2 py-2'
+          ? 'border-border bg-surface flex w-16 shrink-0 flex-col items-center gap-1.5 border-r py-3'
+          : 'border-border bg-surface flex items-center justify-center gap-2 border-t px-2 py-2'
       }
     >
       {STUDIO_TOOLS.map((tool) => {

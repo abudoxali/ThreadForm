@@ -27,6 +27,21 @@ export type PrintZoneId =
   | 'leg-front'
   | 'leg-back';
 
+/**
+ * A rectangle in a garment's UV space (0–1 on both axes), declaring where a
+ * print zone lives on the garment's texture layout. This is what makes a
+ * print zone a real region of the actual mesh rather than a screen-space
+ * guess — the renderer maps artwork into exactly this rectangle, so two
+ * zones on the same mesh (e.g. the Essential Tee's front and back, both on
+ * `Mesh_Torso`) stay independent.
+ */
+export interface UvRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** A print zone as declared by a garment's manifest — see `docs/GARMENT_SPEC.md`. */
 export interface PrintZoneDefinition {
   id: PrintZoneId;
@@ -34,6 +49,15 @@ export interface PrintZoneDefinition {
   /** Max artwork extent within the zone, in zone-normalized units (0–1). */
   maxWidth: number;
   maxHeight: number;
+  /** Where this zone sits in the garment model's UV layout. */
+  uvRect: UvRect;
+  /**
+   * The zone's real-world width ÷ height. UV space is not physically
+   * uniform (a cylindrical torso's `u` is angular, its `v` is vertical), so
+   * this is what lets the renderer keep an artwork's own aspect ratio
+   * instead of stretching it to the zone's UV proportions.
+   */
+  aspectRatio: number;
 }
 
 /** A garment as referenced by a project. Resolved against the garment manifest at runtime. */

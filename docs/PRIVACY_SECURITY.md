@@ -14,10 +14,9 @@ path. Opening `/studio`, choosing a garment, renaming a project, reloading,
 and switching between local projects all work fully offline once the page
 has loaded.
 
-**Artwork upload does not exist yet** — M01 introduces real project
-persistence, not artwork. `ArtworkLayer`/`ArtworkSource` remain domain types
-only; no UI path creates one yet. The object-URL and SVG-safety guidance
-below is the boundary that artwork upload (a later milestone) must respect.
+Artwork (M03) is local-first on the same terms: an imported file is read in
+the browser, stored in IndexedDB, and never leaves the device. There is no
+upload endpoint, and the import path makes no network request of any kind.
 
 ## Garment assets (M02)
 
@@ -31,33 +30,88 @@ manifest response is zod-validated before use (same untrusted-until-validated
 pattern as a stored `Project`); an invalid or unreachable manifest surfaces
 as an honest error state, never a silent fallback to guessed data.
 
+## Artwork import (implemented, M03)
+
+Every uploaded file passes through `packages/artwork-engine` before anything
+else in the app sees it. That module is the whole boundary, and it is
+deliberately the only place these decisions are made:
+
+- **Identity comes from the bytes.** `sniffArtworkFileKind` reads the file's
+  actual signature (PNG/JPEG/WebP magic numbers; a structural check for SVG).
+  `File.type` and the filename extension both come from the operating
+  system's extension mapping and change when a file is renamed, so neither is
+  consulted. A text file named `logo.png` and served as `image/png` is
+  rejected.
+- **Size is bounded before decoding.** A 12 MB file ceiling, plus per-axis
+  (8192 px) and total-pixel (40 megapixel) limits read out of the image's own
+  header by `readImageHeaderSize`. This ordering is the point: a
+  decompression bomb is a few kilobytes of entirely valid PNG that declares a
+  30000×30000 canvas, and by the time an `<img>` could report its
+  `naturalWidth` the gigabytes are already allocated.
+- **SVG is rebuilt, not filtered.** `sanitizeSvg` parses the document with
+  `DOMParser` and re-serializes only what survives: `<script>`,
+  `<foreignObject>`, `<iframe>`, animation elements that can retarget an
+  attribute, every `on*` handler, every non-fragment `href`/`xlink:href`,
+  `@import` and external `url()` in CSS, and any doctype or processing
+  instruction outside the root are all removed. Parsing first defeats the
+  entity-encoding and attribute-quoting tricks that beat regex-based
+  filtering. The bytes written to storage are the rebuilt document, so the
+  hostile original is never persisted.
+- **Rendering is inert by construction.** Artwork is drawn into a canvas via
+  an `<img>` element and uploaded as a WebGL texture. It is never inserted
+  into the page's DOM, never passed to `dangerouslySetInnerHTML`, and never
+  given a same-origin document context.
+- **Persisted bytes are re-checked.** Storage is a trust boundary of its own,
+  so `decodeStoredArtwork` re-sniffs and re-sanitizes on every read and
+  refuses a blob whose real signature contradicts what the project records —
+  the same untrusted-until-validated pattern `local-storage` applies to a
+  stored `Project`.
+- **Rejections are honest and recoverable.** An unsupported or damaged file
+  produces a specific, user-facing message beside the control that was used,
+  and nothing is written to storage. It never silently does nothing, and it
+  never falls back to a placeholder image.
+
 ## Object URL lifecycle
 
 `ArtworkSource` (`packages/types/src/artwork.ts`) deliberately stores a
 `blobId` referencing persisted storage, never a raw `URL.createObjectURL()`
 string — object URLs are session-scoped and revoked on reload, so persisting
-one would silently break on the user's next visit. Any future code that
-creates an object URL for display must revoke it (`URL.revokeObjectURL`) when
-the owning component unmounts or the layer is removed, to avoid leaking
-memory over a long editing session.
+one would silently break on the user's next visit.
+
+As of M03 this is enforced in exactly one place. Every decode returned by
+`artwork-engine` carries its own `release()`, and
+`apps/web/src/hooks/useArtworkAssets.ts` is the sole owner of when that is
+called: it reconciles the set of blob ids a project references against the
+set it currently holds, releasing anything no longer referenced. Deleting a
+layer, replacing its artwork, switching projects and unmounting the Studio
+therefore all clean up through the same path, rather than each needing to
+remember its own. The failure paths release too, before returning the error.
 
 ## SVG safety
 
-SVG is an accepted artwork format (`ArtworkFileKind`). SVG can contain
-`<script>`, external references, and event handler attributes. The future
-artwork-import path must sanitize SVGs before rendering or rasterizing them —
-strip scripts, foreignObject, and external resource references — and must
-never render an uploaded SVG in a context that grants it the app's own
-origin/privileges (e.g. never via `dangerouslySetInnerHTML` on trusted-origin
-markup, never as a same-origin iframe without a sandboxed, restricted
-`allow`/`sandbox` policy).
+SVG is an accepted artwork format (`ArtworkFileKind`), and it is a full XML
+document format that can carry `<script>`, embedded HTML via
+`<foreignObject>`, event-handler attributes, and external resource
+references. The rule stands unchanged: an uploaded SVG is sanitized before it
+is rendered or rasterized, and is never rendered in a context that grants it
+the app's own origin or privileges — never via `dangerouslySetInnerHTML` on
+trusted-origin markup, and never as an unsandboxed same-origin iframe.
+
+Implemented in M03 by `sanitizeSvg` — see "Artwork import" above for what it
+removes and why it parses rather than pattern-matches. Its regression tests
+(`packages/artwork-engine/src/sanitizeSvg.test.ts`) assert on what is
+_absent_ from the rebuilt document, since that is what actually protects the
+user. Any future SVG entry point (a template library, a cloud-sync
+response, an imported project file) must go through the same function; it is
+not specific to the upload path.
 
 ## File validation
 
-Any future upload path must validate: declared MIME type against actual file
-signature (not filename extension alone), file size ceiling, and image
-dimensions before decoding — to avoid decompression-bomb-style resource
-exhaustion from a single oversized image.
+Any upload path validates: the file's actual signature (never its declared
+MIME type or filename extension), a file-size ceiling, and image dimensions
+read from the header _before_ decoding — to avoid decompression-bomb-style
+resource exhaustion from a single small file. Implemented in M03; see
+"Artwork import" above for the specific limits.
 
 ## XSS prevention
 

@@ -23,6 +23,40 @@ export function GarmentIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function ViewIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M3 8a2 2 0 0 1 2-2h1.5l1-1.5h5l1 1.5H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <circle cx="12" cy="12.5" r="3.5" />
+    </Icon>
+  );
+}
+
+export function CheckIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon strokeWidth={2.2} {...props}>
+      <path d="M5 12.5 9.5 17 19 7" />
+    </Icon>
+  );
+}
+
+export function PlusIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon strokeWidth={2} {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </Icon>
+  );
+}
+
+export function ResetViewIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+      <path d="M20 4v5h-5" />
+    </Icon>
+  );
+}
+
 export function ArtworkIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>
@@ -33,48 +67,37 @@ export function ArtworkIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-export function MaterialIcon(props: SVGProps<SVGSVGElement>) {
+export function TrashIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 4v16M4 12h16" opacity={0.5} />
+      <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+      <path d="M10 11v6M14 11v6" />
     </Icon>
   );
 }
 
-export function EffectsIcon(props: SVGProps<SVGSVGElement>) {
+export function SwapIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>
-      <path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
-      <circle cx="12" cy="12" r="3" />
+      <path d="M4 8h13l-3-3M20 16H7l3 3" />
     </Icon>
   );
 }
 
-export function SceneIcon(props: SVGProps<SVGSVGElement>) {
+export function CenterIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>
-      <circle cx="12" cy="8" r="3" />
-      <path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6" />
+      <rect x="4" y="4" width="16" height="16" rx="1.5" />
+      <path d="M12 8.5v7M8.5 12h7" />
     </Icon>
   );
 }
 
-export function AnimationIcon(props: SVGProps<SVGSVGElement>) {
+export function AlertIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>
-      <path d="M5 12a7 7 0 0 1 12-5" />
-      <path d="M19 12a7 7 0 0 1-12 5" />
-      <path d="M17 4v3h-3M7 20v-3h3" />
-    </Icon>
-  );
-}
-
-export function ExportIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <Icon {...props}>
-      <path d="M12 3v12M7 8l5-5 5 5" />
-      <path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+      <path d="M12 4 2.5 20h19z" />
+      <path d="M12 10v4.5M12 17.2v.1" />
     </Icon>
   );
 }

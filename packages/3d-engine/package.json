@@ -19,6 +19,7 @@
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "@threadform/garment-runtime": "workspace:*",
+    "@threadform/types": "workspace:*",
     "three": "^0.185.1"
   },
   "peerDependencies": {
