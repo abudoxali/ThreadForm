@@ -346,8 +346,9 @@ committed. No committed work was removed.
 
 - **Branch:** `main`
 - **Remote:** `https://github.com/3bud-ZC/ThreadForm.git`
-- **Commit:** _recorded below once the milestone commit lands._
-- **Push:** _recorded below._
+- **Commit:** `6630b99` — Milestone 03: artwork import, print-zone placement
+  and real 3D projection.
+- **Push:** succeeded (`da05577..6630b99  main -> main`).
 
 ## Remaining known issues
 
