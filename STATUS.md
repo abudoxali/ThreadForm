@@ -360,9 +360,17 @@ number.
 
 - **Branch:** `main`
 - **Remote:** `https://github.com/3bud-ZC/ThreadForm.git`
-- **M04 implementation commit:** _recorded below once it lands._
-- **Current HEAD:** _recorded below._
-- **Push:** _recorded below._
+- **M04 implementation commit:** `5ebcc29` — "Milestone 04: material &
+  print-effect rendering". This is the commit that contains all M04 code,
+  tests and documentation.
+- **Current HEAD:** the documentation-only commit that carries this section
+  ("docs: record M04 commit hash in STATUS.md"), which sits directly on top
+  of `5ebcc29` and changes nothing but these three lines. A commit cannot
+  state its own hash; `git log -1` gives it. The distinction matters only so
+  that "the M04 commit" is never ambiguous — `5ebcc29` is the one to check
+  out to review the implementation.
+- **Push:** succeeded — `07c7260..5ebcc29 main -> main`, and the
+  documentation commit after it.
 
 ## Next milestone
 
