@@ -389,13 +389,16 @@ journeys under parallel load still need the headroom.
 
 - **Branch:** `main`
 - **Remote:** `https://github.com/3bud-ZC/ThreadForm.git`
-- **M05 implementation commit:** recorded in the documentation commit that
-  follows it — see "Current HEAD" below. This is the commit containing all
-  M05 code, tests and documentation.
+- **M05 implementation commit:** `7650557` — "Milestone 05: production
+  image export". This is the commit containing all M05 code, tests and
+  documentation.
 - **Current HEAD:** the documentation-only commit that carries this section,
-  which sits directly on top of the implementation commit and changes nothing
-  but these lines. A commit cannot state its own hash; `git log -1` gives it.
-  The distinction matters only so "the M05 commit" is never ambiguous.
+  which sits directly on top of `7650557` and changes nothing but these
+  lines. A commit cannot state its own hash; `git log -1` gives it. The
+  distinction matters only so "the M05 commit" is never ambiguous —
+  `7650557` is the one to check out to review the implementation.
+- **Push:** succeeded — `db929fc..7650557 main -> main`, and the
+  documentation commit after it.
 - No history was rewritten, nothing was force-pushed, and no QA screenshots,
   downloaded exports or Playwright traces were committed — the QA scripts and
   their output live outside the repository.
