@@ -8,12 +8,14 @@ import { resolveMaterial } from '@threadform/material-engine';
 import { useStudioProject } from '@/hooks/useStudioProject';
 import { useResolvedGarment } from '@/hooks/useResolvedGarment';
 import { useArtworkAssets } from '@/hooks/useArtworkAssets';
+import { useImageExport } from '@/hooks/useImageExport';
 import { StudioTopbar } from './StudioTopbar';
 import { ToolRail, STUDIO_TOOLS } from './ToolRail';
 import type { StudioTool } from './ToolRail';
 import { GarmentPicker } from './GarmentPicker';
 import { Inspector } from './Inspector';
 import { ArtworkPanel } from './ArtworkPanel';
+import { ExportPanel } from './ExportPanel';
 import { RecentProjects } from './RecentProjects';
 import { NoticeBanner } from './NoticeBanner';
 
@@ -81,6 +83,11 @@ export function StudioShell() {
     clearArtworkEffect,
     setArtworkEffectIntensity,
     setArtworkEffectParameter,
+    setExportTarget,
+    setExportImageFormat,
+    setExportResolution,
+    setExportAspectRatio,
+    setExportCustomDimensions,
     cameraResetToken,
   } = useStudioProject();
 
@@ -101,6 +108,24 @@ export function StudioShell() {
     [project?.material, garment.manifest],
   );
   const { assets, renderLayers, adoptDecodedArtwork } = useArtworkAssets(project);
+
+  /**
+   * Export receives already-resolved inputs — the manifest, the resolved
+   * fabric and decoded artwork — rather than reaching into storage itself.
+   * That is the boundary M03 made necessary: artwork bytes no longer live in
+   * the `Project`, so "Project + preferences" is not enough to draw one.
+   */
+  const {
+    job: exportJob,
+    blockedReason: exportBlockedReason,
+    exportImage,
+  } = useImageExport({
+    project,
+    manifest: garment.manifest,
+    material: resolvedMaterial,
+    renderLayers,
+    assets,
+  });
   const hasProject = project !== null;
 
   function selectTool(tool: StudioTool) {
@@ -167,6 +192,21 @@ export function StudioShell() {
         onClearEffect={clearArtworkEffect}
         onEffectIntensity={setArtworkEffectIntensity}
         onEffectParameter={setArtworkEffectParameter}
+      />
+    ) : null;
+
+  const exportPanel =
+    project && garment.manifest ? (
+      <ExportPanel
+        project={project}
+        onTargetChange={setExportTarget}
+        onFormatChange={setExportImageFormat}
+        onResolutionChange={setExportResolution}
+        onAspectRatioChange={setExportAspectRatio}
+        onCustomDimensionsChange={setExportCustomDimensions}
+        job={exportJob}
+        blockedReason={exportBlockedReason}
+        onExport={() => void exportImage()}
       />
     ) : null;
 
@@ -279,6 +319,7 @@ export function StudioShell() {
           onCameraPreset={setCameraPreset}
           onMaterialChange={setGarmentMaterial}
           artworkPanel={artworkPanel}
+          exportPanel={exportPanel}
         />
       </div>
 
@@ -308,6 +349,7 @@ export function StudioShell() {
               onCameraPreset={setCameraPreset}
               onMaterialChange={setGarmentMaterial}
               artworkPanel={artworkPanel}
+              exportPanel={exportPanel}
               showHeading={false}
             />
           </div>

@@ -101,3 +101,13 @@ export function AlertIcon(props: SVGProps<SVGSVGElement>) {
     </Icon>
   );
 }
+
+export function ExportIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3v11" />
+      <path d="M8.5 6.5 12 3l3.5 3.5" />
+      <path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+    </Icon>
+  );
+}

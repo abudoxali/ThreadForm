@@ -185,6 +185,38 @@ preset instead of a preset id.
   no-ops when the value would not change, so a slider dragged against its
   limit does not churn autosave.
 
+## Export preferences (M05)
+
+`exportPreferences` was modeled from M00 but inert until M05, when image
+export shipped. It is now a real, persisted part of the document, edited
+through `packages/project-engine/src/exportPreferences.ts` like any other
+field — `ExportPanel` never writes a `Project` directly.
+
+- `setExportTarget` — writes the ordinary aspect-ratio and resolution
+  fields the preset stands for, so nothing downstream can tell a preset apart
+  from the user setting both by hand. `custom` leaves them alone.
+- `setExportImageFormat` — image only; `exportPreferences.video` is left
+  untouched, since video is modeled but unimplemented.
+- `setExportResolution` / `setExportAspectRatio` — take the re-derived
+  target as an argument (the caller matches settings against the preset table,
+  which lives in `export-engine`), so a stored project can never claim a
+  preset that no longer matches its own settings. Same reason
+  `setGarmentMaterial` is handed its allow-list rather than looking one up.
+- `setExportCustomDimensions` — rounds to whole pixels and refuses only
+  non-finite input.
+
+**No schema bump.** The persisted shape did not change incompatibly, so
+`schemaVersion` stayed put and no migration was written. The one schema
+edit was a _widening_: `customAspectRatio`'s `width`/`height` went from
+`.positive()` to `.finite()`. Every document valid before M05 is still
+valid.
+
+That widening is deliberate. These are two numbers someone is typing: on the
+way to "1080" the field holds "1", and clearing it holds "0". Storing that is
+harmless; _refusing_ it is not, because the stricter schema would make the
+saved project fail to reopen. The refusal belongs to the export, which
+declines with a specific reason and leaves the project intact.
+
 ## Future migration example
 
 ```ts

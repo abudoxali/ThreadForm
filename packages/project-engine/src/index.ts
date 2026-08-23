@@ -28,6 +28,13 @@ export type { ArtworkTransformPatch } from './artwork';
 export { setGarmentColor, setCameraPreset } from './garment';
 export { setGarmentMaterial, reconcileGarmentMaterial } from './material';
 export {
+  setExportTarget,
+  setExportImageFormat,
+  setExportResolution,
+  setExportAspectRatio,
+  setExportCustomDimensions,
+} from './exportPreferences';
+export {
   findArtworkEffect,
   pruneOrphanEffects,
   applyArtworkEffect,

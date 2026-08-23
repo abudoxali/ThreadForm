@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CameraPresetId,
   EffectKind,
+  ExportAspectRatio,
+  ExportImageFormat,
+  ExportResolution,
+  ExportTargetPreset,
   MaterialId,
   PrintZoneDefinition,
   Project,
@@ -28,9 +32,15 @@ import {
   clearArtworkEffect as clearEffectFromArtwork,
   setArtworkEffectIntensity as applyArtworkEffectIntensity,
   setArtworkEffectParameter as applyArtworkEffectParameter,
+  setExportTarget as applyExportTarget,
+  setExportImageFormat as applyExportImageFormat,
+  setExportResolution as applyExportResolution,
+  setExportAspectRatio as applyExportAspectRatio,
+  setExportCustomDimensions as applyExportCustomDimensions,
 } from '@threadform/project-engine';
 import type { ArtworkTransformPatch } from '@threadform/project-engine';
 import { defaultEffectIntensity, defaultEffectParameters } from '@threadform/effects-engine';
+import { matchTarget, targetSettings } from '@threadform/export-engine';
 import {
   createAndPersistProject,
   deleteProjectById,
@@ -117,6 +127,17 @@ export interface UseStudioProjectResult {
     value: number,
     range: { min: number; max: number },
   ) => void;
+  /**
+   * Export settings, written through `project-engine` and autosaved like
+   * everything else — the panel never hand-edits the project. Changing the
+   * shape or size by hand re-derives the preset, so a highlighted preset can
+   * never disagree with what will actually be rendered.
+   */
+  setExportTarget: (target: ExportTargetPreset) => void;
+  setExportImageFormat: (format: ExportImageFormat) => void;
+  setExportResolution: (resolution: ExportResolution) => void;
+  setExportAspectRatio: (aspectRatio: ExportAspectRatio) => void;
+  setExportCustomDimensions: (width: number, height: number) => void;
   /** Bumped on every `setCameraPreset` call, including a re-selection of the already-active preset — lets the 3D canvas treat that as an explicit "reset view" rather than a no-op. */
   cameraResetToken: number;
 }
@@ -574,6 +595,56 @@ export function useStudioProject(): UseStudioProjectResult {
     [updateProject],
   );
 
+  const setExportTarget = useCallback(
+    (target: ExportTargetPreset) => {
+      // The target's meaning lives in `export-engine`'s preset table;
+      // `project-engine` receives the plain values, the same way it receives
+      // a resolved camera preset.
+      updateProject((current) => applyExportTarget(current, target, targetSettings(target)));
+    },
+    [updateProject],
+  );
+
+  const setExportImageFormat = useCallback(
+    (format: ExportImageFormat) => {
+      updateProject((current) => applyExportImageFormat(current, format));
+    },
+    [updateProject],
+  );
+
+  const setExportResolution = useCallback(
+    (resolution: ExportResolution) => {
+      updateProject((current) =>
+        applyExportResolution(
+          current,
+          resolution,
+          matchTarget(current.exportPreferences.aspectRatio, resolution),
+        ),
+      );
+    },
+    [updateProject],
+  );
+
+  const setExportAspectRatio = useCallback(
+    (aspectRatio: ExportAspectRatio) => {
+      updateProject((current) =>
+        applyExportAspectRatio(
+          current,
+          aspectRatio,
+          matchTarget(aspectRatio, current.exportPreferences.image.resolution),
+        ),
+      );
+    },
+    [updateProject],
+  );
+
+  const setExportCustomDimensions = useCallback(
+    (width: number, height: number) => {
+      updateProject((current) => applyExportCustomDimensions(current, width, height));
+    },
+    [updateProject],
+  );
+
   const dismissNotice = useCallback(() => setNotice(null), []);
 
   return {
@@ -603,6 +674,11 @@ export function useStudioProject(): UseStudioProjectResult {
     clearArtworkEffect,
     setArtworkEffectIntensity,
     setArtworkEffectParameter,
+    setExportTarget,
+    setExportImageFormat,
+    setExportResolution,
+    setExportAspectRatio,
+    setExportCustomDimensions,
     cameraResetToken,
   };
 }

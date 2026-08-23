@@ -1,16 +1,14 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import type { GarmentManifest, CameraPresetDefinition } from '@threadform/garment-runtime';
 import type { ResolvedMaterial } from '@threadform/material-engine';
-import { GarmentModel } from './GarmentModel';
+import { GarmentScene } from './GarmentScene';
 import type { ArtworkRenderLayer } from './ArtworkZoneOverlay';
 import { CameraRig } from './CameraRig';
-import { StudioLighting } from './StudioLighting';
-import { StudioGrounding } from './StudioGrounding';
 import { GarmentCanvasErrorBoundary } from './GarmentCanvasErrorBoundary';
 import type { GarmentBounds } from './frameGarment';
 
@@ -80,18 +78,16 @@ export function StudioGarmentCanvas({
         camera={{ fov: 26, near: 0.05, far: 20 }}
         onCreated={({ gl }) => gl.setClearColor(CANVAS_BACKGROUND)}
       >
-        <StudioGrounding />
-        <StudioLighting />
         <CameraRig preset={cameraPreset} bounds={bounds} resetToken={cameraResetToken} />
-        <Suspense fallback={<LoadingOverlay />}>
-          <GarmentModel
-            manifest={manifest}
-            colorHex={colorHex}
-            material={material}
-            artworkLayers={artworkLayers}
-            onBoundsReady={setBounds}
-          />
-        </Suspense>
+        {/* The same scene the exporter mounts — see GarmentScene. */}
+        <GarmentScene
+          manifest={manifest}
+          colorHex={colorHex}
+          material={material}
+          artworkLayers={artworkLayers}
+          onBoundsReady={setBounds}
+          fallback={<LoadingOverlay />}
+        />
       </Canvas>
     </GarmentCanvasErrorBoundary>
   );

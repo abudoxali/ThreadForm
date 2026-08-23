@@ -21,9 +21,12 @@ packages/artwork-engine  Artwork trust boundary: file-signature sniffing, size/d
 packages/material-engine Fabric presets -> clamped renderer surface parameters (no GPU)
 packages/effects-engine  Print-process presets -> clamped print parameters, with a
                          per-kind allow-list for effect parameters (no GPU)
+packages/export-engine   Export decisions as pure data: resolution/aspect -> pixel
+                         dimensions, target presets, format capability + MIME mapping,
+                         deterministic filenames, job contracts (no DOM/storage/GPU)
 packages/3d-engine       React Three Fiber garment canvas: GLB loading, lighting rig,
                          camera framing/orbit, color, print-zone artwork overlays,
-                         error boundary
+                         error boundary, and the off-screen export renderer
 packages/ui             Design tokens (tokens.css) + presentational React primitives
 packages/config         Shared tsconfig + ESLint flat configs
 assets/garments/        Source-of-truth original garment assets (GLB + manifest.json +
@@ -52,10 +55,16 @@ behind it.
 only place that does so; `useArtworkAssets` is the only place a stored
 artwork `blobId` becomes a decoded image, and the only place its object URL
 is released. `StudioShell` renders `3d-engine`'s `StudioGarmentCanvas` from
-the result — never inline Three.js in a component.
+the result — never inline Three.js in a component. `useImageExport` is the
+only place export meets storage: `export-engine` decides dimensions,
+formats and filenames but must never learn where a `blobId`'s bytes live,
+so the hook resolves assets and hands `renderGarmentImage` already-decoded
+artwork. Export renders off-screen at the requested size through the same
+`GarmentScene` the Studio uses — never a screenshot of the viewport, and
+never a second visual system.
 
 Other packages named in `docs/ARCHITECTURE.md` (2d-engine, animation-engine,
-export-engine, entitlements, analytics) are
+entitlements, analytics) are
 **documented boundaries, not yet implemented**. Do not create empty
 placeholder packages for them — build them when there is real logic to put
 inside.
@@ -95,8 +104,8 @@ Run from the repo root (Turborepo fans out per package):
 ## No fake implementations
 
 Never present a control as functional when it isn't wired to real behavior.
-If a feature doesn't exist yet (e.g. animation or export — still ahead as of
-M04), the UI must say so
+If a feature doesn't exist yet (e.g. animation, or video/3D export — still
+ahead as of M05), the UI must say so
 honestly (disabled state + explanatory `title`, or descriptive placeholder
 copy) rather than simulate output. No fake social proof, no fake metrics, no
 placeholder data presented as real.

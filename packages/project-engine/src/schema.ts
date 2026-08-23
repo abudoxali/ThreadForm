@@ -359,8 +359,23 @@ const exportPreferencesSchema = z.object({
     frameRate: z.union([z.literal(24), z.literal(30), z.literal(60)]),
   }),
   aspectRatio: z.enum(EXPORT_ASPECT_RATIOS),
+  /**
+   * `.finite()` rather than `.positive()`, widened in M05.
+   *
+   * These are two numbers a user types. Halfway to "1080" the field holds
+   * "1", and clearing it holds "0" — and with `.positive()` a stored `0`
+   * would fail validation and make the *whole project* refuse to open. That
+   * is a catastrophic response to a typo. What counts as a usable export
+   * size is a renderer question this schema cannot see, so it is enforced by
+   * `@threadform/export-engine` at the point of export, which refuses with a
+   * specific message and leaves the project intact. Same reasoning as
+   * artwork transforms and material overrides.
+   *
+   * A widening, so every document valid before M05 is still valid — no
+   * migration, and none manufactured.
+   */
   customAspectRatio: z
-    .object({ width: z.number().positive(), height: z.number().positive() })
+    .object({ width: z.number().finite(), height: z.number().finite() })
     .optional(),
 });
 

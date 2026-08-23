@@ -39,6 +39,8 @@ export interface InspectorProps {
    * gives, two independent instances behind one prop.
    */
   artworkPanel?: ReactNode;
+  /** The export tool's panel. Supplied as an element for the same reason `artworkPanel` is — two independent instances behind one prop. */
+  exportPanel?: ReactNode;
   /** False when an ancestor (the mobile `<details><summary>Inspector</summary>`) already labels this panel — avoids a duplicate "Inspector" heading once expanded. */
   showHeading?: boolean;
 }
@@ -52,6 +54,7 @@ export function Inspector({
   onCameraPreset,
   onMaterialChange,
   artworkPanel,
+  exportPanel,
   showHeading = true,
 }: InspectorProps) {
   const hasCustomColor =
@@ -147,6 +150,8 @@ export function Inspector({
       )}
 
       {activeTool === 'artwork' && manifest && project && artworkPanel}
+
+      {activeTool === 'export' && manifest && project && exportPanel}
 
       {activeTool === 'view' && manifest && project && (
         <div className="flex flex-col gap-4">

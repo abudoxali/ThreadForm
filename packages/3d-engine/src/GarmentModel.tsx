@@ -82,7 +82,12 @@ export function GarmentModel({
 
     const box = new THREE.Box3().setFromObject(cloned);
     const sphere = box.getBoundingSphere(new THREE.Sphere());
-    onBoundsReady({ center: sphere.center, radius: sphere.radius });
+    // The box as well as the sphere: `frameGarment` fits the box's projected
+    // silhouette, which is far tighter than a sphere for something as flat
+    // and wide as a garment. The sphere is still what the orbit distance
+    // limits are derived from.
+    const halfExtents = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+    onBoundsReady({ center: sphere.center, radius: sphere.radius, halfExtents });
     invalidate();
 
     return () => {

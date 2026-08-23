@@ -22,3 +22,7 @@ export { buildHeightField, heightFieldToNormalRgba } from './surfaceHeightField'
 export type { SurfaceKind, SurfaceDetail, HeightFieldSpec } from './surfaceHeightField';
 export { groupLayersIntoEffectRuns } from './effectRuns';
 export type { ArtworkEffectRun } from './effectRuns';
+export { GarmentScene } from './GarmentScene';
+export type { GarmentSceneProps } from './GarmentScene';
+export { renderGarmentImage } from './renderGarmentImage';
+export type { GarmentImageRequest } from './renderGarmentImage';

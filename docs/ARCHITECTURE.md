@@ -7,11 +7,11 @@ UI (apps/web, packages/ui)
         ↓
 Application / Project State (a Project value — see PROJECT_SCHEMA.md)
         ↓
-Domain Engines (project-engine, material-engine, effects-engine; animation/export engines future)
+Domain Engines (project-engine, material-engine, effects-engine, export-engine; animation engine future)
         ↓
 Garment Runtime (garment-runtime — resolves a GarmentReference against a manifest)
         ↓
-Renderer / Persistence / Export adapters (3d-engine, local-storage, artwork-engine implemented; 2d-engine, export-engine future)
+Renderer / Persistence / Export adapters (3d-engine, local-storage, artwork-engine implemented; 2d-engine future)
 ```
 
 Dependencies point downward only. A package never imports something above it
@@ -47,10 +47,11 @@ architecture exists to prevent. Concretely:
 | `packages/project-engine`  | Creates, validates, migrates and mutates `Project` values. Pure functions; no React, no storage, no rendering.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `packages/local-storage`   | IndexedDB persistence adapter (via `idb`): save/load/list/delete a `Project`, plus a small "last opened project" pointer. Depends on `project-engine` for `validateProject`/`migrateProject` on every read; no React.                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `packages/garment-runtime` | Fetches and zod-validates a garment manifest (`GARMENT_SPEC.md`), the small catalog of garments with a real manifest, camera preset definitions, and `resolveGarmentReference` (maps a `Project`'s `GarmentReference` — including M01's placeholder shape — to a real, loadable garment). No React, no Three.js.                                                                                                                                                                                                                                                                                                                |
-| `packages/3d-engine`       | React Three Fiber rendering: `StudioGarmentCanvas` (Canvas + error boundary + Suspense loading state), `GarmentModel` (GLB load via drei's `useGLTF`, per-instance material clone, color), `CameraRig` (orbit controls + preset framing), `StudioLighting` (3-point rig), `frameGarment` (pure bounding-sphere/aspect-ratio framing math, unit-tested without a GPU).                                                                                                                                                                                                                                                           |
+| `packages/3d-engine`       | React Three Fiber rendering: `GarmentScene` (the scene Studio and exporter share), `StudioGarmentCanvas` (Canvas + error boundary + Suspense loading state), `GarmentModel` (GLB load via drei's `useGLTF`, per-instance material clone, color), `CameraRig` (orbit controls + preset framing), `StudioLighting` (3-point rig), `frameGarment` (pure bounding-box/aspect-ratio framing math, unit-tested without a GPU), `renderGarmentImage` (off-screen deterministic single-frame render for export).                                                                                                                        |
 | `packages/artwork-engine`  | The artwork trust boundary: file-signature sniffing, size/dimension limits, SVG sanitization, and decoding a blob into a drawable image with an owned object-URL lifetime. No React, no storage, no rendering — it turns untrusted bytes into either a rejection or a safe, decoded image.                                                                                                                                                                                                                                                                                                                                      |
 | `packages/material-engine` | Fabric presets and resolution: turns a `MaterialConfiguration` plus a garment's declared `supportedMaterials` into clamped, renderer-ready surface parameters. Pure; no React, no Three.js, no GPU. Three.js is deliberately not the source of truth for what a fabric _is_.                                                                                                                                                                                                                                                                                                                                                    |
 | `packages/effects-engine`  | Print-process presets and resolution: turns an `EffectConfiguration` into clamped print parameters, with a strict per-kind allow-list for `parameters`. Pure, same constraints as above.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `packages/export-engine`   | Export decisions as pure data and functions: resolution/aspect-ratio → pixel dimensions, target presets, format capability and MIME/extension mapping, deterministic filenames, custom-dimension limits, and the job/result contracts. No DOM, no storage, no Three.js — it decides _what_ to produce, never _how_ or _from where_.                                                                                                                                                                                                                                                                                             |
 | `packages/ui`              | Design-token CSS and presentational React primitives (`Button`, `Panel`, `IconButton`, ...). No domain knowledge.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `packages/config`          | Shared `tsconfig` and ESLint flat configs consumed by every package.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `apps/web`                 | The Next.js application: marketing site (`/`) and Studio (`/studio`). `src/lib/projectRepository.ts` is the only module that combines `project-engine` + `local-storage`; `src/hooks/useStudioProject.ts` is the only place that wires it into React state; `src/hooks/useResolvedGarment.ts` is the only place that resolves a `Project`'s garment against `garment-runtime`; `src/hooks/useArtworkAssets.ts` is the only place that turns a stored `blobId` back into a decoded image and the only place that releases its object URL. Components hold only UI-only state (active tool, selected print zone, selected layer). |
@@ -67,8 +68,6 @@ obvious home, not because empty packages should exist yet:
   renderer-specific parameters. Kept separate from the renderers so presets
   can be authored and tested without a GPU context, exactly as
   `material-engine` and `effects-engine` (both implemented in M04) are.
-- **`export-engine`** — turns a `Project` + `ExportPreferences` into an image,
-  video, or 3D file. See `EXPORT_SPEC.md` for its boundary.
 - **`entitlements`** — the single place capability checks (`canExportPro`,
   `canUsePremiumGarment`, ...) are decided, so Pro/Free logic never leaks into
   UI conditionals.
@@ -260,3 +259,70 @@ shaded at all. A raised stitch surface cannot appear on bare fabric however
 strong the relief is, which is why the stitch surface is a small tiling
 texture rather than a normal map derived per-artwork — the mask already
 exists.
+
+## Image export (M05)
+
+The boundary written in `EXPORT_SPEC.md` before M03 said `export-engine`
+takes a `Project` plus `ExportPreferences` and produces a file. M03 made
+that false: `Project.artworks[].source` holds a `blobId`, and the bytes live
+in IndexedDB. A `Project` alone can no longer render anything.
+
+The wrong fix would be to let `export-engine` reach into `local-storage`.
+That would put a storage dependency inside a domain package, break the
+one-way dependency rule, and make export untestable without a database. The
+rule instead is:
+
+> `export-engine` must not know where local artwork is stored.
+
+So export splits across three layers that already existed:
+
+- **`export-engine` decides.** Pure functions and data tables: short-edge
+  resolution semantics, aspect-ratio and target-preset resolution, format
+  capability and MIME/extension mapping, custom-dimension limits,
+  deterministic filenames, and the job/result/error contracts. No DOM, no
+  storage, no Three.js.
+- **`apps/web` resolves.** `useImageExport` is the only place a `blobId`
+  becomes a decoded image for export, reusing `useArtworkAssets` rather than
+  loading anything itself. It also owns the readiness check: if a visible
+  layer's bytes are still loading or failed, the export refuses _before_
+  rendering and says which. An export presented as final output must not
+  silently omit known content.
+- **`3d-engine` renders.** `renderGarmentImage` receives already-resolved
+  artwork — never a `blobId` — and produces a `Blob`.
+
+This mirrors the existing rule that `projectRepository` is the only place
+domain logic meets persistence. Export gets the same treatment because it
+has the same shape of problem.
+
+**Why the exporter is a second React root, not a screenshot.** Screenshotting
+the visible canvas would make output resolution a function of the user's
+window and `devicePixelRatio` — a 4K export on a small laptop would be an
+upscale. `renderGarmentImage` instead mounts a detached R3F root sized
+exactly to the requested output, renders one frame, and unmounts it.
+
+**Why they share `GarmentScene`.** The real risk of a separate export path is
+that the Studio renderer and the exporter slowly become two different visual
+systems — a lighting tweak lands in one and not the other, and exports stop
+looking like the product. `GarmentScene` holds the lighting rig, the garment
+model, and the material/effect pipeline, and both roots render it. Only what
+must differ differs: the export root uses `frameloop="never"`, `dpr={1}`, an
+explicit pixel size, and `preserveDrawingBuffer: true` — scoped to that root,
+because making it the Studio's default would cost memory and bandwidth every
+frame for a canvas nobody reads back.
+
+**Why framing is re-solved per export.** The camera comes from
+`Project.camera.presetId` resolved through `garment-runtime`, never from live
+OrbitControls state, so a file does not depend on where someone left the
+mouse. `frameGarment` is then re-run at the _export's_ aspect ratio, which is
+what keeps a 9:16 export framed for 9:16 rather than cropped from the
+viewport's shape. That work also replaced the bounding-_sphere_ fit with a
+bounding-_box_ fit solved per corner against the perspective frustum: a
+sphere around a t-shirt is more than twice the garment's depth in every
+direction, which left the product at about a third of a 9:16 frame.
+
+**Job state is not project state.** `idle → preparing → rendering → encoding
+→ completed | failed` lives in the hook. "Exporting" is not a fact about a
+design, so it is never persisted into a `Project`. What _is_ persisted —
+format, resolution, aspect ratio, target, custom size — goes through
+`project-engine` mutators and the ordinary `useStudioProject` autosave, the
+same as every other project edit. `ExportPanel` never edits a `Project`.

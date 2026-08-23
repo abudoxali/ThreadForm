@@ -274,3 +274,119 @@ export const isGarmentFabric = ({ r, g, b }: Rgb): boolean =>
  */
 export const isMagentaHue = ({ r, g, b }: Rgb): boolean =>
   r > 45 && b > 35 && r - g > 25 && b - g > 18;
+
+/**
+ * Identifies an image from its magic bytes.
+ *
+ * Export tests must not take a file's extension as evidence of its contents:
+ * the specific failure `canEncodeImageFormat` exists to prevent is a browser
+ * silently encoding PNG when asked for WebP, which would arrive as a
+ * perfectly named `.webp` full of PNG. Reading the signature is the only way
+ * to catch that from the outside.
+ */
+export function sniffImageFormat(buffer: Buffer): 'png' | 'jpeg' | 'webp' | null {
+  if (buffer.length >= 8 && buffer.toString('hex', 0, 8) === '89504e470d0a1a0a') return 'png';
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'jpeg';
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.toString('ascii', 0, 4) === 'RIFF' &&
+    buffer.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'webp';
+  }
+  return null;
+}
+
+export interface ImageSize {
+  width: number;
+  height: number;
+}
+
+/** Dimensions straight from the header, so a JPEG/WebP can be checked without decoding it. */
+export function readImageSize(buffer: Buffer): ImageSize | null {
+  const format = sniffImageFormat(buffer);
+
+  if (format === 'png') {
+    if (buffer.toString('ascii', 12, 16) !== 'IHDR') return null;
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  }
+
+  if (format === 'jpeg') {
+    let offset = 2;
+    while (offset + 9 < buffer.length) {
+      if (buffer[offset] !== 0xff) {
+        offset += 1;
+        continue;
+      }
+      const marker = buffer[offset + 1]!;
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+        offset += 2;
+        continue;
+      }
+      const length = buffer.readUInt16BE(offset + 2);
+      const isStartOfFrame =
+        marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+      if (isStartOfFrame) {
+        return { height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) };
+      }
+      if (marker === 0xda) return null;
+      offset += 2 + length;
+    }
+    return null;
+  }
+
+  if (format === 'webp') {
+    const chunk = buffer.toString('ascii', 12, 16);
+    if (chunk === 'VP8X') {
+      const read24 = (at: number) => buffer[at]! | (buffer[at + 1]! << 8) | (buffer[at + 2]! << 16);
+      return { width: read24(24) + 1, height: read24(27) + 1 };
+    }
+    if (chunk === 'VP8 ') {
+      if (buffer[23] !== 0x9d || buffer[24] !== 0x01 || buffer[25] !== 0x2a) return null;
+      return {
+        width: ((buffer[27]! << 8) | buffer[26]!) & 0x3fff,
+        height: ((buffer[29]! << 8) | buffer[28]!) & 0x3fff,
+      };
+    }
+    if (chunk === 'VP8L') {
+      if (buffer[20] !== 0x2f) return null;
+      const packed =
+        (buffer[21]! | (buffer[22]! << 8) | (buffer[23]! << 16) | (buffer[24]! << 24)) >>> 0;
+      return { width: (packed & 0x3fff) + 1, height: ((packed >>> 14) & 0x3fff) + 1 };
+    }
+    return null;
+  }
+
+  return null;
+}
+
+export interface AlphaProfile {
+  transparent: number;
+  opaque: number;
+  partial: number;
+  total: number;
+}
+
+/**
+ * How a decoded image's alpha is distributed.
+ *
+ * A transparent export has to be checked as three separate claims: the
+ * background is genuinely absent (`transparent`), the garment is genuinely
+ * solid (`opaque`), and the silhouette is antialiased rather than hard-edged
+ * (`partial`). A PNG with a black rectangle where the backdrop should be
+ * passes a naive "is it a PNG of the right size" check and fails all three.
+ */
+export function alphaProfile(image: DecodedImage): AlphaProfile {
+  let transparent = 0;
+  let opaque = 0;
+  let partial = 0;
+  for (let index = 3; index < image.data.length; index += 4) {
+    const alpha = image.data[index]!;
+    if (alpha === 0) transparent += 1;
+    else if (alpha === 255) opaque += 1;
+    else partial += 1;
+  }
+  return { transparent, opaque, partial, total: image.width * image.height };
+}

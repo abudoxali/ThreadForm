@@ -1,14 +1,15 @@
 import { IconButton } from '@threadform/ui';
-import { ArtworkIcon, GarmentIcon, ViewIcon } from './icons';
+import { ArtworkIcon, ExportIcon, GarmentIcon, ViewIcon } from './icons';
 
-export type StudioTool = 'garment' | 'artwork' | 'view';
+export type StudioTool = 'garment' | 'artwork' | 'view' | 'export';
 
 // Only tools with real, wired-up functionality appear here — see
 // docs/DESIGN_SYSTEM.md and CLAUDE.md's "No fake implementations": a tool
 // that opens onto placeholder copy is prototype residue, not a preview of
 // a future milestone. Artwork joined the rail in M03, when it gained a real
-// import/placement/render path; material, effects, animation and export
-// return when each has something real behind it too.
+// import/placement/render path, and Export in M05, when it gained a real
+// off-screen render and download. Animation returns when it has something
+// real behind it too.
 export const STUDIO_TOOLS: Array<{
   id: StudioTool;
   label: string;
@@ -18,6 +19,7 @@ export const STUDIO_TOOLS: Array<{
   { id: 'garment', label: 'Garment', icon: GarmentIcon, requiresGarment: false },
   { id: 'artwork', label: 'Artwork', icon: ArtworkIcon, requiresGarment: true },
   { id: 'view', label: 'View', icon: ViewIcon, requiresGarment: true },
+  { id: 'export', label: 'Export', icon: ExportIcon, requiresGarment: true },
 ];
 
 export interface ToolRailProps {
