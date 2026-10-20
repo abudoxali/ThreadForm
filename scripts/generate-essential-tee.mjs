@@ -53,7 +53,9 @@ const repoRoot = path.resolve(__dirname, '..');
 // cross-section — a torso reads as an oval, not a cylinder. 1.0 would leave
 // it perfectly round; lower is flatter front-to-back.
 const DEPTH_RATIO = 0.62;
-const LATHE_SEGMENTS = 32;
+// 64 (was 32): the torso silhouette read as faceted in the studio. UV u stays i/segments, so the
+// front/back centerlines remain at u = 0.25 / 0.75 and the print zones are unaffected.
+const LATHE_SEGMENTS = 64;
 
 /**
  * Where the lathe starts its revolution, and therefore where the torso's UV
@@ -161,16 +163,33 @@ function buildHemCapGeometry() {
   return geometry;
 }
 
+/**
+ * Sleeve profile from the shoulder (y = 0, buried in the torso) to the cuff, as (radius, length).
+ * M02 used a straight capped cylinder, which read as a pipe stuck onto the torso. A lathed
+ * profile gives the sleeve a full shoulder cap that narrows through the upper arm, a slight
+ * flare before the cuff, and a folded cuff band — the shape a set-in jersey sleeve actually has.
+ */
+const SLEEVE_PROFILE = [
+  [0.0, 0.0],
+  [0.104, 0.004], // shoulder cap (inside the torso volume)
+  [0.118, 0.05], // fullest point where the sleeve leaves the shoulder
+  [0.112, 0.12],
+  [0.1, 0.19], // upper arm
+  [0.094, 0.232], // slight flare toward the opening
+  [0.097, 0.236], // cuff band fold
+  [0.097, 0.258],
+  [0.09, 0.262], // cuff edge rolls inward
+  [0.0, 0.262], // closed end (no see-through tube)
+];
+
+// Sleeves sit flatter front-to-back than they are tall, like the torso.
+const SLEEVE_DEPTH_RATIO = 0.78;
+const SLEEVE_DROP_DEGREES = 30;
+
 function buildSleeveGeometry() {
-  const radiusTop = 0.096;
-  const radiusBottom = 0.078;
-  const length = 0.26;
-  const radialSegments = 16;
-  // `openEnded: false` (the default) gives real end caps — the previous
-  // open-ended tube was exactly why a gap was visible where the sleeve met
-  // the shoulder (you could see straight through it to the background).
-  const geometry = new THREE.CylinderGeometry(radiusTop, radiusBottom, length, radialSegments);
-  geometry.translate(0, length / 2, 0); // base at origin, extends along +Y
+  const points = SLEEVE_PROFILE.map(([r, y]) => new THREE.Vector2(r, y));
+  const geometry = new THREE.LatheGeometry(points, 48);
+  geometry.scale(1, 1, SLEEVE_DEPTH_RATIO);
   geometry.computeVertexNormals();
   return geometry;
 }
@@ -178,14 +197,22 @@ function buildSleeveGeometry() {
 function buildSleeveMesh(signX, geometry, material) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = signX > 0 ? 'Mesh_Sleeve_R' : 'Mesh_Sleeve_L';
-  mesh.rotation.z = -signX * (Math.PI / 2 + THREE.MathUtils.degToRad(22));
-  // Seated well inside the shoulder ring's radius (~0.288 at y=0.29) and at
-  // the ring's own height, so the capped sleeve base is embedded in the
-  // torso volume rather than merely touching its surface — this is what
-  // actually removes the seam gap (the geometric cap alone isn't enough
-  // without real overlap).
-  mesh.position.set(signX * 0.2, 0.285, 0);
+  mesh.rotation.z = -signX * (Math.PI / 2 + THREE.MathUtils.degToRad(SLEEVE_DROP_DEGREES));
+  // Seated inside the shoulder ring's radius (~0.288 at y=0.29) so the cap is embedded in the
+  // torso volume and no seam gap shows where sleeve meets shoulder.
+  mesh.position.set(signX * 0.215, 0.272, 0);
   return mesh;
+}
+
+/** A thin rib ring (collar or hem band) following the torso's oval cross-section. */
+function buildRibGeometry(radius, y, tube, name) {
+  const geometry = new THREE.TorusGeometry(radius, tube, 10, LATHE_SEGMENTS);
+  geometry.rotateX(Math.PI / 2); // torus lies in XY by default; lay it into the XZ plane
+  geometry.scale(1, 1, DEPTH_RATIO);
+  geometry.translate(0, y, 0);
+  geometry.computeVertexNormals();
+  geometry.name = name;
+  return geometry;
 }
 
 function buildScene() {
@@ -206,9 +233,18 @@ function buildScene() {
   const sleeveRight = buildSleeveMesh(1, sleeveGeometry, fabricMaterial);
   const sleeveLeft = buildSleeveMesh(-1, sleeveGeometry.clone(), fabricMaterial);
 
+  // Crew-neck rib on the collar rim and a hem band at the bottom edge: the two details that make
+  // the silhouette read as a knitted tee rather than a smooth vase.
+  const [collarRadius, collarY] = TORSO_PROFILE[TORSO_PROFILE.length - 1];
+  const collar = new THREE.Mesh(buildRibGeometry(collarRadius + 0.006, collarY - 0.011, 0.0095, 'CollarRibGeometry'), fabricMaterial);
+  collar.name = 'Mesh_CollarRib';
+  const [hemRadius, hemY] = TORSO_PROFILE[0];
+  const hemBand = new THREE.Mesh(buildRibGeometry(hemRadius + 0.002, hemY + 0.012, 0.009, 'HemBandGeometry'), fabricMaterial);
+  hemBand.name = 'Mesh_HemBand';
+
   const root = new THREE.Group();
   root.name = 'ThreadFormEssentialTee';
-  root.add(torso, hemCap, sleeveRight, sleeveLeft);
+  root.add(torso, hemCap, sleeveRight, sleeveLeft, collar, hemBand);
   return root;
 }
 
