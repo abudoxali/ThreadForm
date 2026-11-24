@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/app-icon.webp" alt="ThreadForm icon" width="160"></p>
+
 # ThreadForm
 
 Browser-based 2D/3D apparel design and mockup studio. Turn artwork into
@@ -5,11 +7,10 @@ realistic apparel visuals — garment selection, artwork placement, materials,
 effects, camera/lighting, and export — without installing anything or
 creating an account.
 
-This is a greenfield project. See `docs/PRODUCT.md` for what ThreadForm is,
-`docs/ARCHITECTURE.md` for how it's structured, and `STATUS.md` for exactly
-what's implemented right now — as of M02, the Studio renders a real,
-original 3D garment (WebGL, camera presets, color) with local-first
-persistence; artwork/materials/effects/animation/export are still ahead.
+See `docs/PRODUCT.md` for what ThreadForm is, `docs/ARCHITECTURE.md` for how it's structured,
+and `STATUS.md` for exactly what's implemented right now — as of M05 the Studio has a real 3D garment,
+local-first persistence, artwork import/placement, fabric and print-process rendering, and production
+image export (PNG/JPG/WebP up to 4K). Animation, video export and 3D-file export are not finished.
 
 ## Getting started
 
