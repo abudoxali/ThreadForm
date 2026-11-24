@@ -236,10 +236,16 @@ function buildScene() {
   // Crew-neck rib on the collar rim and a hem band at the bottom edge: the two details that make
   // the silhouette read as a knitted tee rather than a smooth vase.
   const [collarRadius, collarY] = TORSO_PROFILE[TORSO_PROFILE.length - 1];
-  const collar = new THREE.Mesh(buildRibGeometry(collarRadius + 0.006, collarY - 0.011, 0.0095, 'CollarRibGeometry'), fabricMaterial);
+  const collar = new THREE.Mesh(
+    buildRibGeometry(collarRadius + 0.006, collarY - 0.011, 0.0095, 'CollarRibGeometry'),
+    fabricMaterial,
+  );
   collar.name = 'Mesh_CollarRib';
   const [hemRadius, hemY] = TORSO_PROFILE[0];
-  const hemBand = new THREE.Mesh(buildRibGeometry(hemRadius + 0.002, hemY + 0.012, 0.009, 'HemBandGeometry'), fabricMaterial);
+  const hemBand = new THREE.Mesh(
+    buildRibGeometry(hemRadius + 0.002, hemY + 0.012, 0.009, 'HemBandGeometry'),
+    fabricMaterial,
+  );
   hemBand.name = 'Mesh_HemBand';
 
   const root = new THREE.Group();
