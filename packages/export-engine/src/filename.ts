@@ -42,6 +42,7 @@ export interface ExportFilenameParts {
   width: number;
   height: number;
   extension: string;
+  suffix?: string;
 }
 
 /**
@@ -56,6 +57,8 @@ export function exportFilename({
   width,
   height,
   extension,
+  suffix,
 }: ExportFilenameParts): string {
-  return `threadform-${slugifyProjectName(projectName)}-${width}x${height}.${extension}`;
+  const extra = suffix ? `-${suffix}` : '';
+  return `threadform-${slugifyProjectName(projectName)}-${width}x${height}${extra}.${extension}`;
 }

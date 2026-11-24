@@ -1,8 +1,10 @@
 import type {
   ExportAspectRatio,
+  ExportFrameRate,
   ExportImageFormat,
   ExportResolution,
   ExportTargetPreset,
+  ExportVideoFormat,
   Project,
 } from '@threadform/types';
 
@@ -144,6 +146,50 @@ export function setExportCustomDimensions(
   return {
     ...project,
     exportPreferences: { ...current, customAspectRatio: rounded },
+    metadata: { ...project.metadata, ...touch() },
+  };
+}
+
+/**
+ * Video format. Kept separate from the image format rather than sharing one
+ * field: a project's chosen still format and its chosen clip format are
+ * independent choices, and `ExportPreferences` has modelled them separately
+ * since M00.
+ */
+export function setExportVideoFormat(project: Project, format: ExportVideoFormat): Project {
+  const current = project.exportPreferences;
+  if (current.video.format === format) return project;
+  return {
+    ...project,
+    exportPreferences: { ...current, video: { ...current.video, format } },
+    metadata: { ...project.metadata, ...touch() },
+  };
+}
+
+/**
+ * Video resolution tier.
+ *
+ * Deliberately does **not** re-derive `target`: the export targets table maps
+ * a preset to an aspect ratio and an *image* resolution, so letting a video
+ * tier change disturb it would make choosing 720p video silently drop the
+ * user's Instagram-feed still preset.
+ */
+export function setExportVideoResolution(project: Project, resolution: ExportResolution): Project {
+  const current = project.exportPreferences;
+  if (current.video.resolution === resolution) return project;
+  return {
+    ...project,
+    exportPreferences: { ...current, video: { ...current.video, resolution } },
+    metadata: { ...project.metadata, ...touch() },
+  };
+}
+
+export function setExportVideoFrameRate(project: Project, frameRate: ExportFrameRate): Project {
+  const current = project.exportPreferences;
+  if (current.video.frameRate === frameRate) return project;
+  return {
+    ...project,
+    exportPreferences: { ...current, video: { ...current.video, frameRate } },
     metadata: { ...project.metadata, ...touch() },
   };
 }

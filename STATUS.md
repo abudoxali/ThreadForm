@@ -417,4 +417,25 @@ likely to expose real problems, so it is the recommendation.
 
 ---
 
-_Last updated: 2026-08-23 (M05 — export-engine, off-screen deterministic rendering, PNG/transparent PNG/JPG/WebP, 720p–4K, aspect-aware framing, persistent export preferences, file-level visual QA, keyboard QA, memory QA, fixes)._
+## Verification & Workspace Hygiene — 2026-10-20
+
+- **Branch / HEAD:** `main` @ `2039bca` (remote: `https://github.com/3bud-ZC/ThreadForm.git`, synchronized ahead 0 / behind 0).
+- **M06 In-Progress Local Work:** Local modifications preserved across:
+  - `packages/animation-engine` (resolved presets, timeline, clamp logic).
+  - `packages/scene-engine` (lighting presets, background configurations).
+  - `packages/export-engine/src/video.ts` (video export pipeline foundations).
+  - `packages/project-engine/src/animation.ts` and `scene.ts` (animation & scene project reducers).
+- **Fixes Applied:**
+  1. `packages/export-engine/src/filename.ts`: Added `suffix?: string` to `ExportFilenameParts` interface and updated `exportFilename` to append `-${suffix}` when specified, resolving video export filename typing.
+  2. `packages/project-engine/src/animation.test.ts` & `scene.test.ts`: Updated test assertions to inspect `.success` instead of `.ok` matching `ProjectValidationResult`.
+  3. `packages/animation-engine/src/resolve.ts`: Corrected `clamp` to handle `Number.POSITIVE_INFINITY` and `Number.NEGATIVE_INFINITY` correctly by clamping to bounds instead of treating as unrecoverable non-numbers.
+- **Verification Results:**
+  - `pnpm typecheck`: Clean across all 13 workspace packages.
+  - `pnpm test`: 13/13 packages passed; all unit, engine, and web suites 100% green.
+  - `pnpm build`: Next.js 15.5.23 production build succeeded, compiling `/`, `/studio`, `/_not-found`.
+  - Live server smoke check: `next dev` on port 3048 served HTTP 200 for both `/` and `/studio` with full component compilation (1957 modules).
+- **Verdict:** **RUNNABLE / ACTIVE**
+
+---
+
+_Last updated: 2026-10-20 (Workspace verification, M06 type & clamp fixes, full suite and smoke pass)._

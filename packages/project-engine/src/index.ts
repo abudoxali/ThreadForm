@@ -33,7 +33,24 @@ export {
   setExportResolution,
   setExportAspectRatio,
   setExportCustomDimensions,
+  setExportVideoFormat,
+  setExportVideoResolution,
+  setExportVideoFrameRate,
 } from './exportPreferences';
+export {
+  MIN_ANIMATION_DURATION_MS,
+  MAX_ANIMATION_DURATION_MS,
+  MIN_PLAYBACK_SPEED,
+  MAX_PLAYBACK_SPEED,
+  setAnimationPreset,
+  setAnimationDuration,
+  setAnimationPlaybackSpeed,
+  setAnimationLoop,
+  setAnimationRange,
+  reconcileAnimation,
+} from './animation';
+export { setLightingPreset, setBackground, setBackgroundColor } from './scene';
+export type { LightingSources } from './scene';
 export {
   findArtworkEffect,
   pruneOrphanEffects,
